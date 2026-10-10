@@ -94,7 +94,11 @@ h2{font-family:var(--f-display);font-weight:600;font-size:15px;letter-spacing:-.
 .g-wide{grid-template-columns:minmax(0,1.6fr) minmax(0,1fr)}
 @media (max-width:1060px){.g-wide{grid-template-columns:1fr}}
 
-.kpis{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr))}
+.kpis{display:grid;gap:16px;grid-template-columns:repeat(4,minmax(0,1fr))}
+.kpis.k3{grid-template-columns:repeat(3,minmax(0,1fr))}
+@media (max-width:1180px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.kpis.k3{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:640px){.kpis,.kpis.k3{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.kpis.k3>:first-child{grid-column:1/-1}.kpi{padding:14px}.kpi .ico{width:32px;height:32px;margin-bottom:4px}}
+@media (max-width:360px){.kpis,.kpis.k3{grid-template-columns:1fr}}
 .kpi{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:18px;display:grid;gap:4px;align-content:start;box-shadow:var(--shadow);min-width:0}
 .kpi .ico{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;background:var(--brand-soft);color:var(--brand-strong);margin-bottom:8px}
 .kpi .ico svg{width:19px;height:19px}
@@ -119,8 +123,9 @@ h2{font-family:var(--f-display);font-weight:600;font-size:15px;letter-spacing:-.
 .chart{position:relative;width:100%;min-width:0}
 .chart.h220{height:220px}.chart.h260{height:260px}.chart.h300{height:300px}
 .chart canvas{display:block}
-.donut-wrap{display:grid;grid-template-columns:180px minmax(0,1fr);gap:20px;align-items:center}
-@media (max-width:520px){.donut-wrap{grid-template-columns:1fr;justify-items:center}}
+.donut-wrap{display:flex;flex-wrap:wrap;gap:20px;align-items:center;justify-content:center}
+.donut-wrap .legend{flex:1 1 200px}
+.donut{flex:none}
 .donut{position:relative;width:180px;height:180px}
 .donut .center{position:absolute;inset:0;display:grid;place-content:center;text-align:center;pointer-events:none}
 .donut .center b{font-family:var(--f-display);font-size:26px;font-weight:600}
@@ -535,7 +540,8 @@ const VIEWS = {
     const d = new Date().getDate();
     if (state.mes === mesDe(hoy()) && d >= num(cfg.diaCobro) && r.pendientes.length) alerts.push(['bad',`${r.pendientes.length} cliente(s) sin pagar este mes: ${r.pendientes.map(c => esc(c.nombre)).join(', ')}.`]);
     if (r.gastosMov > r.presupuestoMov && r.presupuestoMov > 0) alerts.push(['bad',`Traslados y pautas van en ${usdt(r.gastosMov)}, por encima del presupuesto de ${usdt(r.presupuestoMov)}. Esa diferencia sale de tu ganancia.`]);
-    cfg.planes.forEach(p => { const pp = precioPlan(p); if (pp.lista < pp.recomendado) alerts.push(['warn',`El plan ${esc(p.nombre)} está en $${nf2.format(pp.lista)} BCV y con la tasa de hoy debería estar en $${nf2.format(pp.recomendado)} BCV. <button class="btn sm" data-go="planes" style="margin-top:6px">Revisar precios</button>`]); });
+    const bajos = cfg.planes.map(p => [p, precioPlan(p)]).filter(([p, pp]) => pp.lista < pp.recomendado);
+    if (bajos.length) alerts.push(['warn', `La brecha subió: ${bajos.length === 1 ? 'un plan quedó' : bajos.length + ' planes quedaron'} por debajo del precio recomendado (${bajos.map(([p, pp]) => `${esc(p.nombre)} $${nf0.format(pp.lista)} → $${nf0.format(pp.recomendado)}`).join(' · ')}).<div style="margin-top:8px"><button class="btn sm" data-go="planes">Revisar precios</button></div>`]);
     if (!alerts.length) alerts.push(['ok','Todo en orden: tasa al día, precios cubren el margen y no hay cobros vencidos.']);
     const usoMov = r.presupuestoMov > 0 ? r.gastosMov / r.presupuestoMov : 0;
     const rep = cfg.reparto, mb = Math.max(0, r.margenBruto);
@@ -639,7 +645,7 @@ const VIEWS = {
     const prog = r.base > 0 ? r.cobradoUSDT / r.base : 0;
     return `
     ${head('Cobros', 'Cobros de ' + nombreMes(m), `Se cobra el día ${C().diaCobro}. El cliente paga el precio en $ BCV: en bolívares a la tasa BCV del día o el equivalente en USDT. Recibes lo mismo por cualquier vía.`, mesPicker())}
-    <div class="kpis">
+    <div class="kpis k3">
       ${kpi('cobros', 'Por cobrar', usd(r.esperadoBCV), 'BCV', t ? bs(r.esperadoBCV * t.bcv) : 'Sin tasa')}
       ${kpi('in', 'Equivale a', nf2.format(r.esperadoUSDT), 'USDT', 'Dinero real que te llega')}
       <div class="kpi"><div class="ico">${ICON.check}</div><span class="lab">Ya cobrado</span><span class="val">${nf2.format(r.cobradoUSDT)}<small>USDT</small></span><span class="sub">${cl.length - r.pendientes.length} de ${cl.length} clientes</span>
@@ -669,7 +675,7 @@ const VIEWS = {
     });
     return `
     ${head('Gastos', 'Gastos de ' + nombreMes(m), 'Anota cada taxi, gasolina o gasto de pauta con el cliente al que corresponde. Así ves qué cuenta se come el presupuesto de traslados.', mesPicker())}
-    <div class="kpis">
+    <div class="kpis k3">
       <div class="kpi"><div class="ico">${ICON.gastos}</div><span class="lab">Traslados y pautas</span><span class="val">${nf2.format(r.gastosMov)}<small>USDT</small></span><span class="sub">de ${usdt(r.presupuestoMov)} de presupuesto</span>
         <div class="meter"><i class="${usoMov > 1 ? 'over' : ''}" style="width:${Math.min(100, usoMov * 100)}%"></i></div></div>
       ${kpi('cost', 'Otros gastos', nf2.format(r.gastosOtros), 'USDT', 'Fuera de traslados')}
@@ -716,7 +722,7 @@ const VIEWS = {
       options: { cutout: '64%', plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ` ${c.label}: ${fmtU(c.parsed)}` } } } } }));
     return `
     ${head('Equipo', 'Equipo y reparto · ' + nombreMes(m), `Pagos en USDT del día ${cfg.diaCobro}. El community y el video maker cobran primero; los sueldos de ustedes dos salen del margen que queda.`, mesPicker())}
-    <div class="kpis">
+    <div class="kpis k3">
       ${kpi('margin', 'Margen para repartir', nf2.format(r.margenBruto), 'USDT', r.pendientes.length ? 'Incluye lo que falta por cobrar' : 'Todo cobrado', 'hero')}
       ${kpi('equipo', 'Equipo de producción', nf2.format(r.cm + r.video), 'USDT', 'Community + video maker')}
       <div class="kpi"><div class="ico">${ICON.check}</div><span class="lab">Pagos hechos</span><span class="val">${hechos}<small>de ${lines.length}</small></span><span class="sub">del mes</span><div class="meter"><i style="width:${hechos / lines.length * 100}%"></i></div></div>
@@ -818,7 +824,7 @@ const VIEWS = {
         scales: { x: { grid: { display: false } }, y: { ticks: { callback: v => nf0.format(v) } }, y2: { position: 'right', grid: { display: false }, ticks: { callback: v => v + '%' } } } } }); });
     return `
     ${head('Mercado', 'Tasas del día', 'Cada mañana a las 9 el sistema busca solo la tasa BCV oficial y el precio del USDT en Binance P2P. Si un día quieres usar otra, cárgala aquí: la tuya tiene prioridad.')}
-    <div class="kpis">
+    <div class="kpis k3">
       ${kpi('tasas', 'Dólar BCV', t ? nf2.format(t.bcv) : '—', 'Bs', t ? 'Fecha ' + esc(t.fecha) : 'Sin tasa')}
       ${kpi('cobros', 'USDT (P2P)', t ? nf2.format(t.usdt) : '—', 'Bs', t ? esc(t.fuente || '') : '')}
       ${kpi('margin', 'Brecha', t ? nf2.format((t.usdt / t.bcv - 1) * 100) : '—', '%', 'Lo que cubre el ajuste de precios')}
