@@ -151,11 +151,15 @@ const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto'
 const nombreMes = m => { const [y,mm] = m.split('-'); return MESES[+mm-1] + ' ' + y; };
 const shiftMes = (m, d) => { let [y,mm] = m.split('-').map(Number); mm += d; while (mm < 1) { mm += 12; y--; } while (mm > 12) { mm -= 12; y++; } return y + '-' + String(mm).padStart(2,'0'); };
 const num = v => { const n = parseFloat(String(v).replace(',', '.')); return isFinite(n) ? n : 0; };
+const mesNum = m => +String(m).replace('-', '');
+const numMes = n => { n = Math.round(num(n)); return Math.floor(n / 100) + '-' + String(n % 100).padStart(2, '0'); };
+const ayer = () => { const d = new Date(); d.setDate(d.getDate() - 1); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
+const soloDigitos = t => { let d = String(t || '').replace(/\D/g, ''); if (d.startsWith('0')) d = '58' + d.slice(1); return d; };
 function toast(msg){ const h = $('#toastHost'); h.innerHTML = '<div class="toast" role="status">'+esc(msg)+'</div>'; clearTimeout(toast.t); toast.t = setTimeout(()=>h.innerHTML='', 2600); }
 
 /* ---------- configuración por defecto de la app ---------- */
 const DEFAULT_CONFIG = {
-  margen: 60, colchon: 5, redondeo: 5, diaCobro: 5,
+  margen: 60, colchon: 5, redondeo: 5, diaCobro: 5, inicio: 202611,
   sueldoVideo: 200, viaticoPauta: 15,
   herramientas: [{ id:'claude', nombre:'Claude', monto:30 }, { id:'capcut', nombre:'CapCut', monto:20 }],
   reparto: { direccion:35, estrategia:35, reserva:15, reinversion:15 },
@@ -176,6 +180,7 @@ const state = {
   tab: 'resumen', mes: mesDe(hoy()), editCliente: null, openPago: null
 };
 const C = () => state.config || DEFAULT_CONFIG;
+const inicioMes = () => { const v = num(C().inicio); return v >= 200001 ? numMes(v) : '2026-11'; };
 
 /* ---------- almacenamiento: Google Sheet a través del Apps Script ---------- */
 const sortTasas = a => a.sort((x, y) => x.fecha < y.fecha ? 1 : -1);
@@ -219,6 +224,7 @@ const Store = {
     state.cobros = {}; (d.cobros || []).forEach(r => state.cobros[r.id] = r);
     state.gastos = sortTasas((d.gastos || []).map(g => ({ ...g, clienteId: g.clienteId || null })));
     state.nomina = {}; (d.nomina || []).forEach(r => { const pagos = {}; PAGOS.forEach(k => pagos[k] = r[k] === true || String(r[k]).toLowerCase() === 'true'); state.nomina[r.id] = { id: r.id, mes: r.mes, pagos }; });
+    if (state.mes < inicioMes()) state.mes = inicioMes();
   },
   /* las escrituras van en fila, una detrás de otra, y la pantalla se actualiza al instante */
   write(payload){
@@ -226,7 +232,7 @@ const Store = {
     this.q = this.q.then(() => this.call(payload)).catch(async () => {
       toast('No se pudo guardar en el Sheet. Revisa tu conexión; recargué los datos.');
       await this.refresh();
-    }).finally(() => { this.busy--; });
+    }).finally(() => { this.busy--; if (!this.busy) this.refresh(); });
     return this.q;
   },
   set(col, id, data){
@@ -245,7 +251,7 @@ const Store = {
     scheduleRender();
   }
 };
-const saveConfig = cfg => Store.set('agencia', 'config', cfg);
+const saveConfig = cfg => { if (!(num(cfg.inicio) >= 200001)) cfg.inicio = mesNum(inicioMes()); return Store.set('agencia', 'config', cfg); };
 const cfgCopy = () => JSON.parse(JSON.stringify(C()));
 
 /* ---------- cálculos ---------- */
@@ -273,13 +279,15 @@ function precioPlan(p){
   return { cost, necesario, objetivo, recomendado, lista, recibes, margen, bsHoy: tasa() ? lista * tasa().bcv : 0 };
 }
 const cobroId = (m, cid) => m + '_' + cid;
+/* clientes que cuentan en un mes: ya habían empezado, y están activos o pagaron ese mes */
+const clientesMes = m => state.clientes.filter(c => plan(c.plan) && (!c.desde || c.desde <= m) && (c.estado !== 'pausado' || !!state.cobros[cobroId(m, c.id)]));
 function cobroDe(m, c){
   const r = state.cobros[cobroId(m, c.id)];
   const p = plan(c.plan); const pp = p ? precioPlan(p) : null;
   return { reg: r, montoBCV: r?.montoBCV ?? (pp ? pp.lista : 0), pagado: r?.estado === 'pagado', recibidoUSDT: r?.recibidoUSDT ?? 0 };
 }
 function resumenMes(m){
-  const cl = activos();
+  const cl = clientesMes(m);
   let esperadoBCV = 0, esperadoUSDT = 0, cobradoUSDT = 0, base = 0, pendientes = [];
   cl.forEach(c => { const cb = cobroDe(m, c), eq = cb.montoBCV / factor(); esperadoBCV += cb.montoBCV; esperadoUSDT += eq;
     if (cb.pagado) { cobradoUSDT += num(cb.recibidoUSDT); base += num(cb.recibidoUSDT); } else { pendientes.push(c); base += eq; } });
@@ -308,7 +316,7 @@ function render(){
   pendingRender = false;
   // tasas en la cabecera
   const t = tasa();
-  const stale = t && t.fecha < hoy();
+  const stale = t && t.fecha < ayer();
   $('#rates').innerHTML = t
     ? `<span class="pill"><b>BCV</b>${nf2.format(t.bcv)}</span><span class="pill"><b>USDT</b>${nf2.format(t.usdt)}</span><span class="pill gap"><b>Brecha</b>${nf2.format((t.usdt/t.bcv - 1)*100)}%</span>${stale ? `<button class="pill stale" style="cursor:pointer;font-family:var(--f-body)" data-go="tasas">Tasa del ${esc(t.fecha.slice(8))}/${esc(t.fecha.slice(5,7))} · actualizar</button>` : ''}`
     : `<button class="pill stale" style="cursor:pointer" data-go="tasas">Carga la tasa del día</button>`;
@@ -322,7 +330,7 @@ function render(){
 }
 
 function mesPicker(){
-  return `<div class="row"><button class="btn sm" data-mes="-1" aria-label="Mes anterior">←</button><span style="font-weight:700;min-width:130px;text-align:center;text-transform:capitalize">${nombreMes(state.mes)}</span><button class="btn sm" data-mes="1" aria-label="Mes siguiente">→</button></div>`;
+  return `<div class="row"><button class="btn sm" data-mes="-1" aria-label="Mes anterior" ${state.mes <= inicioMes() ? 'disabled' : ''}>←</button><span style="font-weight:700;min-width:130px;text-align:center;text-transform:capitalize">${nombreMes(state.mes)}</span><button class="btn sm" data-mes="1" aria-label="Mes siguiente">→</button></div>`;
 }
 
 const VIEWS = {
@@ -377,7 +385,7 @@ const VIEWS = {
 
   /* ===== COBROS ===== */
   cobros(){
-    const t = tasa(), cl = activos(), m = state.mes, r = resumenMes(m);
+    const t = tasa(), m = state.mes, cl = clientesMes(m), r = resumenMes(m);
     if (!cl.length) return `<div class="head"><h1>Cobros</h1>${mesPicker()}</div><div class="empty">Aún no hay clientes activos. <button class="btn sm" data-go="clientes">Agregar el primer cliente</button></div>`;
     const rows = cl.map(c => {
       const p = plan(c.plan), cb = cobroDe(m, c);
@@ -393,6 +401,7 @@ const VIEWS = {
         <td>${estado}</td>
         <td class="r">${recib}</td>
         <td class="r"><div class="row" style="justify-content:flex-end">
+          ${c.telefono && soloDigitos(c.telefono).length >= 10 ? `<a class="btn sm" href="https://wa.me/${soloDigitos(c.telefono)}?text=${encodeURIComponent(msgCobro(c))}" target="_blank" rel="noopener">WhatsApp</a>` : ''}
           <button class="btn sm" data-copy="${c.id}">Copiar mensaje</button>
           ${cb.pagado ? `<button class="btn sm ghost" data-unpay="${c.id}">Deshacer</button>` : `<button class="btn sm pri" data-openpay="${c.id}">${open ? 'Cerrar' : 'Registrar pago'}</button>`}
         </div></td></tr>
@@ -586,6 +595,7 @@ const VIEWS = {
       ${fld('aColchon','Colchón cambiario (%)','colchon',0.5,'Protege si la brecha sube antes del cobro')}
       ${fld('aRedondeo','Redondear precios a ($)','redondeo',1)}
       ${fld('aDia','Día de cobro','diaCobro',1)}
+      <label class="f" for="aInicio">Empezar a usar el sistema en<input id="aInicio" type="month" value="${inicioMes()}"><span style="font-weight:400;font-size:12px">Los meses anteriores no se muestran</span></label>
     </div></section>
     <section class="card"><h2>Costos de producción</h2><div class="form">
       ${fld('aVideo','Sueldo video maker (USDT/mes)','sueldoVideo',1)}
@@ -618,6 +628,11 @@ function setupView(){
   </form></section>`;
 }
 
+function msgCobro(c){
+  const p = plan(c.plan), cb = cobroDe(state.mes, c), t = tasa();
+  return `Hola, ${c.nombre}. Te escribimos de MULATO EDICIONES para recordarte la mensualidad de ${nombreMes(state.mes)} de tu Plan ${p.nombre}: $${nf2.format(cb.montoBCV)} a tasa BCV.` +
+    (t ? ` Hoy (${t.fecha}) equivale a Bs ${nf2.format(cb.montoBCV * t.bcv)} a tasa BCV de ${nf2.format(t.bcv)}, o ${nf2.format(cb.montoBCV / factor())} USDT.` : '') + ` ¡Gracias por seguir creciendo con nosotros!`;
+}
 function payForm(c, cb){
   const t = tasa(); const bsAmt = t ? cb.montoBCV * t.bcv : 0; const eqU = cb.montoBCV / factor();
   const isBs = c.pago === 'bs';
@@ -639,13 +654,12 @@ document.addEventListener('click', async e => {
   const d = b.dataset;
   if (d.tab) { state.tab = d.tab; state.openPago = null; render(); window.scrollTo({ top: 0 }); return; }
   if (d.go) { state.tab = d.go; render(); window.scrollTo({ top: 0 }); return; }
-  if (d.mes) { state.mes = shiftMes(state.mes, +d.mes); state.openPago = null; render(); return; }
+  if (d.mes) { const nm = shiftMes(state.mes, +d.mes); if (nm < inicioMes()) return; state.mes = nm; state.openPago = null; render(); return; }
   if (d.openpay) { state.openPago = state.openPago === d.openpay ? null : d.openpay; render(); return; }
   if (d.unpay) { await Store.del('cobros', cobroId(state.mes, d.unpay)); toast('Pago deshecho'); return; }
   if (d.copy) {
-    const c = state.clientes.find(x => x.id === d.copy), p = plan(c.plan), cb = cobroDe(state.mes, c), t = tasa();
-    const txt = `Hola, ${c.nombre}. Te escribimos de MULATO EDICIONES para recordarte la mensualidad de ${nombreMes(state.mes)} de tu Plan ${p.nombre}: $${nf2.format(cb.montoBCV)} a tasa BCV.` +
-      (t ? ` Hoy (${t.fecha}) equivale a Bs ${nf2.format(cb.montoBCV * t.bcv)} a tasa BCV de ${nf2.format(t.bcv)}, o ${nf2.format(cb.montoBCV / factor())} USDT.` : '') + ` ¡Gracias por seguir creciendo con nosotros!`;
+    const c = state.clientes.find(x => x.id === d.copy); if (!c) return;
+    const txt = msgCobro(c);
     try { await navigator.clipboard.writeText(txt); toast('Mensaje copiado. Pégalo en WhatsApp.'); }
     catch(err) { const ta = document.createElement('textarea'); ta.value = txt; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); toast('Mensaje copiado.'); } catch(e2) { toast('Selecciona y copia el texto manualmente.'); } ta.remove(); }
     return;
@@ -679,6 +693,7 @@ document.addEventListener('click', async e => {
 document.addEventListener('change', async e => {
   const el = e.target, d = el.dataset;
   if (d.plan && d.field) { const cfg = cfgCopy(); const p = cfg.planes.find(x => x.id === d.plan); p[d.field] = num(el.value); await saveConfig(cfg); return; }
+  if (el.id === 'aInicio') { if (!/^\d{4}-\d{2}$/.test(el.value)) return; const cfg = cfgCopy(); cfg.inicio = mesNum(el.value); if (state.mes < el.value) state.mes = el.value; await saveConfig(cfg); return; }
   if (d.cfg) { const cfg = cfgCopy(); cfg[d.cfg] = num(el.value); await saveConfig(cfg); return; }
   if (d.rep) { const cfg = cfgCopy(); cfg.reparto[d.rep] = num(el.value); await saveConfig(cfg); return; }
   if (d.herr !== undefined) { const cfg = cfgCopy(); const h = cfg.herramientas[+d.herr]; h[d.hf] = d.hf === 'monto' ? num(el.value) : el.value; await saveConfig(cfg); return; }
@@ -726,11 +741,12 @@ document.addEventListener('submit', async e => {
   }
   if (f.dataset.payfor) {
     const cid = f.dataset.payfor, c = state.clientes.find(x => x.id === cid), cb = cobroDe(state.mes, c), t = tasa();
-    const metodo = f.metodo.value, monto = num(f.monto.value), tus = num(f.tusdt.value) || (t ? t.usdt : 0);
+    const fv = n => (f.querySelector(`[name="${n}"]`) || {}).value || '';
+    const metodo = fv('metodo'), monto = num(fv('monto')), tus = num(fv('tusdt')) || (t ? t.usdt : 0);
     if (monto <= 0) { toast('Escribe el monto recibido.'); return; }
     if (metodo === 'bs' && !tus) { toast('Falta la tasa USDT para convertir los bolívares.'); return; }
     const recibidoUSDT = metodo === 'bs' ? monto / tus : monto;
-    await Store.set('cobros', cobroId(state.mes, cid), { mes: state.mes, clienteId: cid, estado: 'pagado', montoBCV: cb.montoBCV, metodo, montoRecibido: monto, tasaUSDT: tus, tasaBCV: t ? t.bcv : null, recibidoUSDT: Math.round(recibidoUSDT * 100) / 100, fechaPago: f.fecha.value });
+    await Store.set('cobros', cobroId(state.mes, cid), { mes: state.mes, clienteId: cid, estado: 'pagado', montoBCV: cb.montoBCV, metodo, montoRecibido: monto, tasaUSDT: tus, tasaBCV: t ? t.bcv : null, recibidoUSDT: Math.round(recibidoUSDT * 100) / 100, fechaPago: fv('fecha') || hoy() });
     state.openPago = null; toast('Pago registrado'); render(); return;
   }
 });
