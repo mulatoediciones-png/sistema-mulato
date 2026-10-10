@@ -1,0 +1,748 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<meta name="theme-color" content="#6E4FD8">
+<title>Mulato Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,500..900&family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: barra de marca con tasas siempre visibles, pestañas de módulos, contenido en una columna de tarjetas por función */
+:root{
+  --bg:#F6F4FA; --surface:#FFFFFF; --sunk:#EFEBF7; --ink:#17131F; --muted:#665F79; --line:#E2DCEE;
+  --accent:#6E4FD8; --accent-ink:#FFFFFF; --brand:#A58CF4; --brand-soft:#ECE5FD;
+  --ok:#17784F; --ok-soft:#E2F3EA; --warn:#9A6212; --warn-soft:#FBF0DC; --bad:#B4351A; --bad-soft:#FBE6E0;
+  --f-display:"Archivo","Arial Narrow",system-ui,sans-serif;
+  --f-body:"Figtree",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-num:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#110F17; --surface:#1A1723; --sunk:#221E2D; --ink:#EEEAF6; --muted:#A49CB8; --line:#2E2A3B;
+  --accent:#B6A0FA; --accent-ink:#17131F; --brand:#A58CF4; --brand-soft:#2A2340;
+  --ok:#5FD39C; --ok-soft:#173326; --warn:#E7B45C; --warn-soft:#352812; --bad:#F08A6E; --bad-soft:#3A1D16;
+  color-scheme:dark }}
+:root[data-theme="dark"]{
+  --bg:#110F17; --surface:#1A1723; --sunk:#221E2D; --ink:#EEEAF6; --muted:#A49CB8; --line:#2E2A3B;
+  --accent:#B6A0FA; --accent-ink:#17131F; --brand:#A58CF4; --brand-soft:#2A2340;
+  --ok:#5FD39C; --ok-soft:#173326; --warn:#E7B45C; --warn-soft:#352812; --bad:#F08A6E; --bad-soft:#3A1D16;
+  color-scheme:dark }
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.5}
+.wrap{max-width:1120px;margin:0 auto;padding-inline:16px;padding-block:0 48px}
+header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+.brandrow{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;padding-block:14px 10px}
+.logo{display:flex;align-items:center;gap:10px}
+.mark{width:34px;height:34px;border-radius:8px;background:var(--ink);display:grid;place-items:center}
+.mark span{display:block;width:16px;height:16px;border-radius:0 9px 9px 0;background:var(--brand)}
+.wordmark{font-family:var(--f-display);font-weight:900;font-stretch:85%;letter-spacing:.02em;line-height:1;font-size:17px}
+.wordmark small{display:block;font-weight:600;font-stretch:100%;letter-spacing:.14em;font-size:10px;color:var(--muted);margin-top:3px;text-transform:uppercase}
+.rates{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.pill{font-family:var(--f-num);font-size:12px;padding:4px 9px;border-radius:999px;background:var(--surface);border:1px solid var(--line);white-space:nowrap}
+.pill b{font-family:var(--f-body);font-weight:600;color:var(--muted);margin-right:4px;font-size:11px;letter-spacing:.04em}
+.pill.gap{background:var(--brand-soft);border-color:transparent}
+.pill.stale{background:var(--warn-soft);color:var(--warn);border-color:transparent}
+nav.tabs{display:flex;gap:2px;overflow-x:auto;scrollbar-width:none;margin-inline:-4px}
+nav.tabs::-webkit-scrollbar{display:none}
+nav.tabs button{font:inherit;font-weight:600;font-size:14px;color:var(--muted);background:none;border:0;padding:10px 12px;border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap}
+nav.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+nav.tabs button:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.banner{margin-top:14px;padding:10px 14px;border-radius:var(--r);background:var(--warn-soft);color:var(--warn);font-size:14px}
+main{display:grid;gap:18px;padding-top:20px}
+.head{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px}
+h1{font-family:var(--f-display);font-weight:850;font-stretch:90%;font-size:clamp(26px,4vw,34px);line-height:1.05;margin:0;text-wrap:balance;letter-spacing:-.01em}
+h2{font-family:var(--f-display);font-weight:800;font-stretch:95%;font-size:18px;margin:0 0 10px;text-wrap:balance}
+.lede{color:var(--muted);margin:6px 0 0;max-width:65ch}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;min-width:0}
+.grid{display:grid;gap:12px}
+.g2{grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr))}
+.kpis{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr))}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;display:grid;gap:2px;align-content:start}
+.kpi .lab{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.kpi .val{font-family:var(--f-display);font-weight:800;font-stretch:90%;font-size:28px;font-variant-numeric:tabular-nums;line-height:1.15}
+.kpi .sub{font-size:13px;color:var(--muted)}
+.kpi.hl{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.kpi.hl .lab,.kpi.hl .sub{color:color-mix(in srgb,var(--bg) 70%,var(--ink))}
+.num{font-family:var(--f-num);font-variant-numeric:tabular-nums;white-space:nowrap}
+.muted{color:var(--muted)}
+.tbl{overflow-x:auto;margin-inline:-16px;padding-inline:16px}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th{text-align:left;font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:10px;border-bottom:1px solid var(--line);vertical-align:middle}
+tr:last-child td{border-bottom:0}
+td.r,th.r{text-align:right}
+tfoot td{font-weight:700;border-top:1px solid var(--ink);border-bottom:0}
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;padding:2px 9px;border-radius:999px;white-space:nowrap}
+.chip.ok{background:var(--ok-soft);color:var(--ok)}
+.chip.warn{background:var(--warn-soft);color:var(--warn)}
+.chip.bad{background:var(--bad-soft);color:var(--bad)}
+.chip.neu{background:var(--sunk);color:var(--muted)}
+.chip.plan{background:var(--brand-soft);color:var(--ink)}
+label.f{display:grid;gap:4px;font-size:13px;font-weight:600;color:var(--muted);min-width:0}
+input,select{font:inherit;font-size:15px;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%;min-width:0}
+input[type="number"]{font-family:var(--f-num);font-size:14px}
+input.mini{width:96px;padding:6px 8px}
+.form{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));align-items:end}
+.btn{font:inherit;font-weight:600;font-size:14px;border-radius:8px;padding:9px 14px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;white-space:nowrap}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.sm{padding:5px 10px;font-size:13px}
+.btn.ghost{border-color:transparent;background:none;color:var(--muted)}
+.btn.danger{color:var(--bad)}
+.btn:hover{filter:brightness(.97)}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.alerts{display:grid;gap:8px}
+.alert{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:8px;font-size:14px;border-left:3px solid}
+.alert.warn{background:var(--warn-soft);border-color:var(--warn)}
+.alert.bad{background:var(--bad-soft);border-color:var(--bad)}
+.alert.ok{background:var(--ok-soft);border-color:var(--ok)}
+.meter{height:10px;border-radius:999px;background:var(--sunk);overflow:hidden;margin-block:8px 4px}
+.meter i{display:block;height:100%;background:var(--accent);border-radius:999px}
+.meter i.over{background:var(--bad)}
+.split{display:grid;gap:6px}
+.split .line{display:flex;justify-content:space-between;gap:12px;padding-block:6px;border-bottom:1px dashed var(--line);font-size:14px}
+.split .line:last-child{border-bottom:0}
+.split .line.total{border-top:1px solid var(--ink);border-bottom:0;font-weight:700;padding-top:8px}
+.empty{padding:22px;text-align:left;color:var(--muted);border:1px dashed var(--line);border-radius:var(--r)}
+.formula{font-family:var(--f-num);font-size:13px;background:var(--sunk);border-radius:8px;padding:10px 12px;overflow-x:auto}
+.toast{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;font-size:14px;z-index:20}
+details.inline summary{cursor:pointer;color:var(--accent);font-weight:600;font-size:13px}
+.paybox{display:grid;gap:10px;padding:12px;margin-top:8px;background:var(--sunk);border-radius:8px}
+.pdetail td{background:var(--sunk)}
+@media (prefers-reduced-motion:no-preference){.meter i{transition:width .3s ease}}
+body{margin:0}
+[hidden]{display:none!important}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap" style="padding-bottom:0">
+    <div class="brandrow">
+      <div class="logo"><div class="mark" aria-hidden="true"><span></span></div>
+        <div class="wordmark">MULATO EDICIONES<small>Administración</small></div></div>
+      <div class="rates" id="rates"></div>
+    </div>
+    <nav class="tabs" role="tablist" id="tabs"></nav>
+  </div>
+</header>
+<div class="wrap">
+  <div id="banner"></div>
+  <main id="app" aria-live="polite"></main>
+</div>
+<div id="toastHost"></div>
+
+<script>
+/* ---------- utilidades ---------- */
+const $ = (s, el=document) => el.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const nf2 = new Intl.NumberFormat('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});
+const nf0 = new Intl.NumberFormat('es-VE',{maximumFractionDigits:0});
+const usd = n => '$' + nf2.format(n || 0);
+const usdt = n => nf2.format(n || 0) + ' USDT';
+const bs = n => 'Bs ' + nf2.format(n || 0);
+const pct = n => nf0.format((n || 0) * 100) + '%';
+const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
+const hoy = () => { const d = new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
+const mesDe = f => String(f).slice(0,7);
+const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+const nombreMes = m => { const [y,mm] = m.split('-'); return MESES[+mm-1] + ' ' + y; };
+const shiftMes = (m, d) => { let [y,mm] = m.split('-').map(Number); mm += d; while (mm < 1) { mm += 12; y--; } while (mm > 12) { mm -= 12; y++; } return y + '-' + String(mm).padStart(2,'0'); };
+const num = v => { const n = parseFloat(String(v).replace(',', '.')); return isFinite(n) ? n : 0; };
+function toast(msg){ const h = $('#toastHost'); h.innerHTML = '<div class="toast" role="status">'+esc(msg)+'</div>'; clearTimeout(toast.t); toast.t = setTimeout(()=>h.innerHTML='', 2600); }
+
+/* ---------- configuración por defecto de la app ---------- */
+const DEFAULT_CONFIG = {
+  margen: 60, colchon: 5, redondeo: 5, diaCobro: 5,
+  sueldoVideo: 200, viaticoPauta: 15,
+  herramientas: [{ id:'claude', nombre:'Claude', monto:30 }, { id:'capcut', nombre:'CapCut', monto:20 }],
+  reparto: { direccion:35, estrategia:35, reserva:15, reinversion:15 },
+  planes: [
+    { id:'emprendedor', nombre:'Emprendedor', base:120, cm:20, pautas:1, lista:175 },
+    { id:'impulso', nombre:'Impulso', base:200, cm:40, pautas:1, lista:240 },
+    { id:'expansion', nombre:'Expansión', base:300, cm:30, pautas:2, lista:360 },
+    { id:'escala', nombre:'Escala', base:500, cm:40, pautas:4, lista:600 }
+  ]
+};
+const CATS = ['Taxi / traslado','Gasolina','Gastos de pauta','Herramientas','Otro'];
+const CATS_MOV = ['Taxi / traslado','Gasolina','Gastos de pauta'];
+
+/* ---------- estado ---------- */
+const state = {
+  loaded: false, mode: 'pending',
+  config: null, tasas: [], clientes: [], cobros: {}, gastos: [], nomina: {},
+  tab: 'resumen', mes: mesDe(hoy()), editCliente: null, openPago: null
+};
+const C = () => state.config || DEFAULT_CONFIG;
+
+/* ---------- almacenamiento: Google Sheet a través del Apps Script ---------- */
+const sortTasas = a => a.sort((x, y) => x.fecha < y.fecha ? 1 : -1);
+const sortCli = a => a.sort((x, y) => (x.orden ?? 99) - (y.orden ?? 99) || String(x.nombre).localeCompare(String(y.nombre)));
+const PAGOS = ['cm','video','direccion','estrategia','reserva','reinversion'];
+const Store = {
+  url: '', key: '', busy: 0, q: Promise.resolve(),
+  conf(){ try { return JSON.parse(localStorage.getItem('mulato-api') || 'null'); } catch(e) { return null; } },
+  async start(){
+    const c = this.conf();
+    if (!c || !c.url || !c.key) { state.mode = 'setup'; state.loaded = true; render(); return; }
+    this.url = c.url; this.key = c.key; state.mode = 'sheet';
+    try { const cache = JSON.parse(localStorage.getItem('mulato-cache') || 'null'); if (cache) { this.ingest(cache); state.loaded = true; render(); } } catch(e) {}
+    await this.refresh();
+    if (!this.timer) {
+      this.timer = setInterval(() => { if (document.visibilityState === 'visible' && !this.busy) this.refresh(); }, 120000);
+      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && !this.busy) this.refresh(); });
+    }
+  },
+  async call(payload){
+    const r = await fetch(this.url, { method: 'POST', body: JSON.stringify({ key: this.key, ...payload }) });
+    const j = await r.json();
+    if (!j.ok) { const e = new Error(j.error || 'error'); e.code = j.error; throw e; }
+    return j;
+  },
+  async refresh(){
+    try {
+      const j = await this.call({ action: 'all' });
+      this.ingest(j.data); state.offline = false;
+      try { localStorage.setItem('mulato-cache', JSON.stringify(j.data)); } catch(e) {}
+    } catch(e) {
+      if (e.code === 'clave') { state.mode = 'setup'; state.setupError = 'La clave no coincide con la del Apps Script.'; }
+      else state.offline = true;
+    }
+    state.loaded = true; scheduleRender();
+  },
+  ingest(d){
+    state.config = d.config && d.config.planes && d.config.planes.length ? d.config : null;
+    state.tasas = sortTasas((d.tasas || []).map(t => ({ ...t, bcv: num(t.bcv), usdt: num(t.usdt) })));
+    state.clientes = sortCli((d.clientes || []).map(c => ({ ...c, orden: num(c.orden) || 50 })));
+    state.cobros = {}; (d.cobros || []).forEach(r => state.cobros[r.id] = r);
+    state.gastos = sortTasas((d.gastos || []).map(g => ({ ...g, clienteId: g.clienteId || null })));
+    state.nomina = {}; (d.nomina || []).forEach(r => { const pagos = {}; PAGOS.forEach(k => pagos[k] = r[k] === true || String(r[k]).toLowerCase() === 'true'); state.nomina[r.id] = { id: r.id, mes: r.mes, pagos }; });
+  },
+  /* las escrituras van en fila, una detrás de otra, y la pantalla se actualiza al instante */
+  write(payload){
+    this.busy++;
+    this.q = this.q.then(() => this.call(payload)).catch(async () => {
+      toast('No se pudo guardar en el Sheet. Revisa tu conexión; recargué los datos.');
+      await this.refresh();
+    }).finally(() => { this.busy--; });
+    return this.q;
+  },
+  set(col, id, data){
+    this.applyLocal(col, id, data);
+    if (col === 'agencia') return this.write({ action: 'config', data });
+    const d = col === 'nomina' ? { mes: data.mes, ...data.pagos } : data;
+    return this.write({ action: 'set', col, id, data: d });
+  },
+  del(col, id){ this.applyLocal(col, id, null); return this.write({ action: 'del', col, id }); },
+  applyLocal(col, id, data){
+    if (col === 'agencia') state.config = data;
+    else if (col === 'cobros' || col === 'nomina') { if (data) state[col][id] = { id, ...data }; else delete state[col][id]; }
+    else { const arr = state[col].filter(r => r.id !== id); if (data) arr.push({ id, ...data }); state[col] = arr;
+      if (col === 'tasas' || col === 'gastos') sortTasas(arr);
+      if (col === 'clientes') sortCli(arr); }
+    scheduleRender();
+  }
+};
+const saveConfig = cfg => Store.set('agencia', 'config', cfg);
+const cfgCopy = () => JSON.parse(JSON.stringify(C()));
+
+/* ---------- cálculos ---------- */
+const tasa = () => state.tasas[0] || null;
+const factor = () => { const t = tasa(); return t ? (t.usdt / t.bcv) : 1; };
+const plan = id => C().planes.find(p => p.id === id);
+const activos = () => state.clientes.filter(c => c.estado !== 'pausado' && plan(c.plan));
+const pautasActivas = () => activos().reduce((s, c) => s + num(plan(c.plan).pautas), 0);
+const totalHerr = () => C().herramientas.reduce((s, h) => s + num(h.monto), 0);
+const costoPautaVideo = () => num(C().sueldoVideo) / Math.max(1, pautasActivas());
+const herrPorCliente = () => totalHerr() / Math.max(1, activos().length);
+function costoPlan(p){
+  const cm = num(p.cm), video = num(p.pautas) * costoPautaVideo(), mov = num(p.pautas) * num(C().viaticoPauta), herr = herrPorCliente();
+  return { cm, video, mov, herr, total: cm + video + mov + herr };
+}
+const roundUp = (n, step) => Math.ceil(n / Math.max(1, step)) * Math.max(1, step);
+function precioPlan(p){
+  const cost = costoPlan(p);
+  const necesario = cost.total / (1 - num(C().margen) / 100);       // USDT que necesitas recibir para el margen objetivo
+  const objetivo = Math.max(necesario, num(p.base));                // nunca por debajo de lo que quieres recibir en USDT
+  const recomendado = roundUp(objetivo * factor() * (1 + num(C().colchon) / 100), num(C().redondeo)); // en $ BCV
+  const lista = num(p.lista) || recomendado;
+  const recibes = lista / factor();                                // USDT reales que te llegan al cobrar la lista a tasa BCV
+  const margen = recibes > 0 ? 1 - cost.total / recibes : 0;
+  return { cost, necesario, objetivo, recomendado, lista, recibes, margen, bsHoy: tasa() ? lista * tasa().bcv : 0 };
+}
+const cobroId = (m, cid) => m + '_' + cid;
+function cobroDe(m, c){
+  const r = state.cobros[cobroId(m, c.id)];
+  const p = plan(c.plan); const pp = p ? precioPlan(p) : null;
+  return { reg: r, montoBCV: r?.montoBCV ?? (pp ? pp.lista : 0), pagado: r?.estado === 'pagado', recibidoUSDT: r?.recibidoUSDT ?? 0 };
+}
+function resumenMes(m){
+  const cl = activos();
+  let esperadoBCV = 0, esperadoUSDT = 0, cobradoUSDT = 0, base = 0, pendientes = [];
+  cl.forEach(c => { const cb = cobroDe(m, c), eq = cb.montoBCV / factor(); esperadoBCV += cb.montoBCV; esperadoUSDT += eq;
+    if (cb.pagado) { cobradoUSDT += num(cb.recibidoUSDT); base += num(cb.recibidoUSDT); } else { pendientes.push(c); base += eq; } });
+  const cm = cl.reduce((s, c) => s + num(plan(c.plan).cm), 0);
+  const video = num(C().sueldoVideo), herr = totalHerr();
+  const gm = state.gastos.filter(g => g.mes === m && g.categoria !== 'Herramientas');
+  const gastosMov = gm.filter(g => CATS_MOV.includes(g.categoria)).reduce((s, g) => s + num(g.montoUSDT), 0);
+  const gastosOtros = gm.filter(g => !CATS_MOV.includes(g.categoria)).reduce((s, g) => s + num(g.montoUSDT), 0);
+  const presupuestoMov = pautasActivas() * num(C().viaticoPauta);
+  const costos = cm + video + herr + gastosMov + gastosOtros;
+  const margenBruto = base - costos;
+  return { cl, esperadoBCV, esperadoUSDT, cobradoUSDT, pendientes, cm, video, herr, gastosMov, gastosOtros, presupuestoMov, costos, base, margenBruto, margenPct: base > 0 ? margenBruto / base : 0 };
+}
+
+/* ---------- render ---------- */
+const TABS = [['resumen','Resumen'],['cobros','Cobros'],['gastos','Gastos'],['equipo','Equipo y reparto'],['planes','Planes y precios'],['clientes','Clientes'],['tasas','Tasas'],['ajustes','Ajustes']];
+let pendingRender = false;
+function scheduleRender(){
+  const a = document.activeElement;
+  if (a && $('#app').contains(a) && /INPUT|SELECT|TEXTAREA/.test(a.tagName)) { pendingRender = true; return; }
+  render();
+}
+document.addEventListener('focusout', () => setTimeout(() => { if (pendingRender) { const a = document.activeElement; if (!(a && /INPUT|SELECT|TEXTAREA/.test(a.tagName))) { pendingRender = false; render(); } } }, 0));
+
+function render(){
+  pendingRender = false;
+  // tasas en la cabecera
+  const t = tasa();
+  const stale = t && t.fecha < hoy();
+  $('#rates').innerHTML = t
+    ? `<span class="pill"><b>BCV</b>${nf2.format(t.bcv)}</span><span class="pill"><b>USDT</b>${nf2.format(t.usdt)}</span><span class="pill gap"><b>Brecha</b>${nf2.format((t.usdt/t.bcv - 1)*100)}%</span>${stale ? `<button class="pill stale" style="cursor:pointer;font-family:var(--f-body)" data-go="tasas">Tasa del ${esc(t.fecha.slice(8))}/${esc(t.fecha.slice(5,7))} · actualizar</button>` : ''}`
+    : `<button class="pill stale" style="cursor:pointer" data-go="tasas">Carga la tasa del día</button>`;
+  $('#tabs').innerHTML = TABS.map(([k, l]) => `<button role="tab" aria-selected="${state.tab === k}" data-tab="${k}">${l}</button>`).join('');
+  $('#banner').innerHTML = state.offline ? `<div class="banner">No hay conexión con el Sheet. Estás viendo los últimos datos cargados; los cambios no se guardarán hasta que vuelva la conexión.</div>` : '';
+  const app = $('#app');
+  $('#tabs').hidden = state.mode === 'setup';
+  if (state.mode === 'setup') { app.innerHTML = setupView(); return; }
+  if (!state.loaded) { app.innerHTML = `<div class="empty">Cargando los datos de la agencia…</div>`; return; }
+  app.innerHTML = (VIEWS[state.tab] || VIEWS.resumen)();
+}
+
+function mesPicker(){
+  return `<div class="row"><button class="btn sm" data-mes="-1" aria-label="Mes anterior">←</button><span style="font-weight:700;min-width:130px;text-align:center;text-transform:capitalize">${nombreMes(state.mes)}</span><button class="btn sm" data-mes="1" aria-label="Mes siguiente">→</button></div>`;
+}
+
+const VIEWS = {
+  /* ===== RESUMEN ===== */
+  resumen(){
+    const r = resumenMes(state.mes), cfg = C(), t = tasa();
+    const alerts = [];
+    if (!t) alerts.push(['bad','No hay tasa cargada. Sin la tasa BCV y USDT del día los precios en bolívares no se pueden calcular.']);
+    else if (t.fecha < hoy()) alerts.push(['warn',`La última tasa es del ${t.fecha}. Actualízala antes de cobrar.`]);
+    const d = new Date().getDate();
+    if (state.mes === mesDe(hoy()) && d >= num(cfg.diaCobro) && r.pendientes.length) alerts.push(['bad',`${r.pendientes.length} cliente(s) sin pagar este mes: ${r.pendientes.map(c => esc(c.nombre)).join(', ')}.`]);
+    if (r.gastosMov > r.presupuestoMov && r.presupuestoMov > 0) alerts.push(['bad',`Traslados y pautas van en ${usdt(r.gastosMov)}, por encima del presupuesto de ${usdt(r.presupuestoMov)}. Esa diferencia sale de tu ganancia.`]);
+    cfg.planes.forEach(p => { const pp = precioPlan(p); if (pp.lista < pp.recomendado) alerts.push(['warn',`El plan ${esc(p.nombre)} está en $${nf2.format(pp.lista)} BCV y con la tasa de hoy debería estar en $${nf2.format(pp.recomendado)} BCV.`]); });
+    if (!alerts.length) alerts.push(['ok','Todo en orden: tasa al día, precios cubren el margen y no hay cobros vencidos.']);
+    const usoMov = r.presupuestoMov > 0 ? r.gastosMov / r.presupuestoMov : 0;
+    const rep = cfg.reparto, mb = Math.max(0, r.margenBruto);
+    return `
+    <div class="head"><div><h1>Resumen de ${nombreMes(state.mes)}</h1><p class="lede">Todo en USDT reales, que es la moneda en la que pagas al equipo. Los cobros en bolívares se convierten a la tasa USDT del día.</p></div>${mesPicker()}</div>
+    <div class="kpis">
+      <div class="kpi hl"><span class="lab">Margen del mes</span><span class="val">${pct(r.margenPct)}</span><span class="sub">Meta ${nf0.format(cfg.margen)}% · ${usdt(r.margenBruto)}</span></div>
+      <div class="kpi"><span class="lab">Ingreso esperado</span><span class="val">${nf2.format(r.esperadoUSDT)}</span><span class="sub">USDT · ${usd(r.esperadoBCV)} BCV · ${r.cl.length} clientes</span></div>
+      <div class="kpi"><span class="lab">Cobrado</span><span class="val">${nf2.format(r.cobradoUSDT)}</span><span class="sub">USDT · ${r.pendientes.length ? r.pendientes.length + ' pendiente(s)' : 'todos pagaron'}</span></div>
+      <div class="kpi"><span class="lab">Costos del mes</span><span class="val">${nf2.format(r.costos)}</span><span class="sub">USDT · equipo, herramientas y gastos</span></div>
+    </div>
+    <div class="grid g2">
+      <section class="card"><h2>Qué revisar</h2><div class="alerts">${alerts.map(([k, m]) => `<div class="alert ${k}">${m}</div>`).join('')}</div></section>
+      <section class="card"><h2>Traslados y pautas</h2>
+        <div class="row" style="justify-content:space-between"><span class="num">${usdt(r.gastosMov)}</span><span class="muted">de ${usdt(r.presupuestoMov)}</span></div>
+        <div class="meter" role="img" aria-label="Uso del presupuesto de traslados"><i class="${usoMov > 1 ? 'over' : ''}" style="width:${Math.min(100, usoMov * 100)}%"></i></div>
+        <p class="muted" style="margin:6px 0 0;font-size:14px">Presupuesto: ${pautasActivas()} pautas este mes × ${usdt(cfg.viaticoPauta)} por pauta. Este monto ya está incluido en el precio de cada plan; si te pasas, lo pagas de tu ganancia.</p>
+        <button class="btn sm" style="margin-top:10px" data-go="gastos">Registrar un gasto</button>
+      </section>
+    </div>
+    <div class="grid g2">
+      <section class="card"><h2>De dónde sale y a dónde va el dinero</h2><div class="split">
+        <div class="line"><span>Ingreso del mes${r.pendientes.length ? ' (cobrado + por cobrar)' : ''}</span><span class="num">${usdt(r.base)}</span></div>
+        <div class="line"><span>Community manager</span><span class="num">− ${usdt(r.cm)}</span></div>
+        <div class="line"><span>Video maker</span><span class="num">− ${usdt(r.video)}</span></div>
+        <div class="line"><span>Herramientas</span><span class="num">− ${usdt(r.herr)}</span></div>
+        <div class="line"><span>Traslados y pautas</span><span class="num">− ${usdt(r.gastosMov)}</span></div>
+        ${r.gastosOtros ? `<div class="line"><span>Otros gastos</span><span class="num">− ${usdt(r.gastosOtros)}</span></div>` : ''}
+        <div class="line total"><span>Margen para repartir</span><span class="num">${usdt(r.margenBruto)}</span></div></div></section>
+      <section class="card"><h2>Reparto del margen</h2><div class="split">
+        <div class="line"><span>Tu sueldo (dirección y social media) · ${rep.direccion}%</span><span class="num">${usdt(mb * rep.direccion / 100)}</span></div>
+        <div class="line"><span>Sueldo estratega · ${rep.estrategia}%</span><span class="num">${usdt(mb * rep.estrategia / 100)}</span></div>
+        <div class="line"><span>Fondo de reserva · ${rep.reserva}%</span><span class="num">${usdt(mb * rep.reserva / 100)}</span></div>
+        <div class="line"><span>Reinversión de la agencia · ${rep.reinversion}%</span><span class="num">${usdt(mb * rep.reinversion / 100)}</span></div></div>
+        <button class="btn sm" style="margin-top:10px" data-go="equipo">Ver pagos del mes</button></section>
+    </div>
+`;
+  },
+
+  /* ===== COBROS ===== */
+  cobros(){
+    const t = tasa(), cl = activos(), m = state.mes, r = resumenMes(m);
+    if (!cl.length) return `<div class="head"><h1>Cobros</h1>${mesPicker()}</div><div class="empty">Aún no hay clientes activos. <button class="btn sm" data-go="clientes">Agregar el primer cliente</button></div>`;
+    const rows = cl.map(c => {
+      const p = plan(c.plan), cb = cobroDe(m, c);
+      const bsAmt = t ? cb.montoBCV * t.bcv : 0, eqU = cb.montoBCV / factor();
+      const open = state.openPago === c.id;
+      const estado = cb.pagado ? `<span class="chip ok">Pagado</span>` : (state.mes === mesDe(hoy()) && new Date().getDate() > num(C().diaCobro) ? `<span class="chip bad">Vencido</span>` : `<span class="chip warn">Pendiente</span>`);
+      const recib = cb.pagado ? `<div class="num">${usdt(cb.recibidoUSDT)}</div><div class="muted" style="font-size:12px">${cb.reg.metodo === 'bs' ? bs(cb.reg.montoRecibido) + ' · ' : ''}${esc(cb.reg.fechaPago || '')}</div>` : `<span class="muted">—</span>`;
+      return `<tr>
+        <td><strong>${esc(c.nombre)}</strong><div><span class="chip plan">${esc(p.nombre)}</span> <span class="muted" style="font-size:12px">${c.pago === 'bs' ? 'Paga en Bs' : 'Paga en USDT'}</span></div></td>
+        <td class="r num">${usd(cb.montoBCV)}</td>
+        <td class="r num">${t ? bs(bsAmt) : '—'}</td>
+        <td class="r num">${nf2.format(eqU)}</td>
+        <td>${estado}</td>
+        <td class="r">${recib}</td>
+        <td class="r"><div class="row" style="justify-content:flex-end">
+          <button class="btn sm" data-copy="${c.id}">Copiar mensaje</button>
+          ${cb.pagado ? `<button class="btn sm ghost" data-unpay="${c.id}">Deshacer</button>` : `<button class="btn sm pri" data-openpay="${c.id}">${open ? 'Cerrar' : 'Registrar pago'}</button>`}
+        </div></td></tr>
+        ${open && !cb.pagado ? `<tr class="pdetail"><td colspan="7">${payForm(c, cb)}</td></tr>` : ''}`;
+    }).join('');
+    return `
+    <div class="head"><div><h1>Cobros de ${nombreMes(m)}</h1><p class="lede">Se cobra el día ${C().diaCobro}. El cliente paga el precio en $ BCV: en bolívares a la tasa BCV del día, o el equivalente en USDT. Así recibes lo mismo por cualquier vía.</p></div>${mesPicker()}</div>
+    <div class="kpis">
+      <div class="kpi"><span class="lab">Por cobrar</span><span class="val">${usd(r.esperadoBCV)}</span><span class="sub">en $ BCV · ${t ? bs(r.esperadoBCV * t.bcv) : 'sin tasa'}</span></div>
+      <div class="kpi"><span class="lab">Equivale a</span><span class="val">${nf2.format(r.esperadoUSDT)}</span><span class="sub">USDT reales</span></div>
+      <div class="kpi"><span class="lab">Ya cobrado</span><span class="val">${nf2.format(r.cobradoUSDT)}</span><span class="sub">USDT · ${cl.length - r.pendientes.length} de ${cl.length}</span></div>
+    </div>
+    <section class="card"><div class="tbl"><table>
+      <thead><tr><th>Cliente</th><th class="r">Precio $ BCV</th><th class="r">En Bs hoy</th><th class="r">En USDT</th><th>Estado</th><th class="r">Recibido</th><th></th></tr></thead>
+      <tbody>${rows}</tbody></table></div></section>`;
+  },
+
+  /* ===== GASTOS ===== */
+  gastos(){
+    const m = state.mes, cfg = C(), r = resumenMes(m);
+    const list = state.gastos.filter(g => g.mes === m);
+    const porCat = CATS.map(cat => [cat, list.filter(g => g.categoria === cat).reduce((s, g) => s + num(g.montoUSDT), 0)]).filter(x => x[1] > 0);
+    const porCli = {}; list.filter(g => CATS_MOV.includes(g.categoria)).forEach(g => { const k = g.clienteId || '_'; porCli[k] = (porCli[k] || 0) + num(g.montoUSDT); });
+    const cliName = id => id === '_' ? 'Sin cliente' : (state.clientes.find(c => c.id === id)?.nombre || 'Cliente borrado');
+    const cliPres = id => { const c = state.clientes.find(x => x.id === id); return c && plan(c.plan) ? num(plan(c.plan).pautas) * num(cfg.viaticoPauta) : 0; };
+    const usoMov = r.presupuestoMov > 0 ? r.gastosMov / r.presupuestoMov : 0;
+    return `
+    <div class="head"><div><h1>Gastos de ${nombreMes(m)}</h1><p class="lede">Anota cada taxi, gasolina o gasto de pauta con el cliente al que corresponde. Así ves qué cuenta se come el presupuesto de traslados.</p></div>${mesPicker()}</div>
+    <section class="card"><h2>Nuevo gasto</h2>
+      <form class="form" id="gastoForm">
+        <label class="f" for="gFecha">Fecha<input id="gFecha" type="date" value="${hoy()}" required></label>
+        <label class="f" for="gCat">Tipo<select id="gCat">${CATS.map(c => `<option>${c}</option>`).join('')}</select></label>
+        <label class="f" for="gCli">Cliente<select id="gCli"><option value="">Sin cliente</option>${activos().map(c => `<option value="${c.id}">${esc(c.nombre)}</option>`).join('')}</select></label>
+        <label class="f" for="gMonto">Monto<input id="gMonto" type="number" step="0.01" min="0" inputmode="decimal" required></label>
+        <label class="f" for="gMon">Moneda<select id="gMon"><option value="usdt">USDT / $</option><option value="bs">Bolívares</option></select></label>
+        <label class="f" for="gNota">Nota<input id="gNota" type="text" placeholder="Ej. taxi a grabación"></label>
+        <button class="btn pri" type="submit">Agregar gasto</button>
+      </form>
+      <p class="muted" style="font-size:13px;margin:8px 0 0">Los montos en bolívares se pasan a USDT con la tasa USDT del día (${tasa() ? nf2.format(tasa().usdt) : 'sin tasa'}).</p>
+    </section>
+    <div class="grid g2">
+      <section class="card"><h2>Traslados y pautas vs. presupuesto</h2>
+        <div class="row" style="justify-content:space-between"><span class="num">${usdt(r.gastosMov)}</span><span class="muted">de ${usdt(r.presupuestoMov)}</span></div>
+        <div class="meter"><i class="${usoMov > 1 ? 'over' : ''}" style="width:${Math.min(100, usoMov * 100)}%"></i></div>
+        ${Object.keys(porCli).length ? `<div class="split" style="margin-top:8px">${Object.entries(porCli).sort((a,b) => b[1]-a[1]).map(([k, v]) => { const pr = cliPres(k); return `<div class="line"><span>${esc(cliName(k))}${pr ? ` <span class="muted">· presupuesto ${usdt(pr)}</span>` : ''}</span><span class="num" style="color:${pr && v > pr ? 'var(--bad)' : 'inherit'}">${usdt(v)}</span></div>`; }).join('')}</div>` : `<p class="muted">Sin traslados registrados este mes.</p>`}
+      </section>
+      <section class="card"><h2>Por tipo</h2>${porCat.length ? `<div class="split">${porCat.map(([k, v]) => `<div class="line"><span>${k}</span><span class="num">${usdt(v)}</span></div>`).join('')}</div>` : `<p class="muted">Sin gastos este mes.</p>`}
+        <p class="muted" style="font-size:13px;margin:10px 0 0">Las herramientas fijas (${cfg.herramientas.map(h => esc(h.nombre)).join(', ')}) ya se suman solas cada mes; no hace falta anotarlas aquí.</p></section>
+    </div>
+    <section class="card"><h2>Movimientos</h2>
+      ${list.length ? `<div class="tbl"><table><thead><tr><th>Fecha</th><th>Tipo</th><th>Cliente</th><th>Nota</th><th class="r">Monto</th><th class="r">USDT</th><th></th></tr></thead><tbody>
+      ${list.map(g => `<tr><td class="num">${esc(g.fecha)}</td><td>${esc(g.categoria)}</td><td>${esc(g.clienteId ? cliName(g.clienteId) : '—')}</td><td>${esc(g.nota || '')}</td><td class="r num">${g.moneda === 'bs' ? bs(g.montoOriginal) : usd(g.montoOriginal)}</td><td class="r num">${nf2.format(g.montoUSDT)}</td><td class="r"><button class="btn sm ghost danger" data-delgasto="${g.id}">Borrar</button></td></tr>`).join('')}
+      </tbody></table></div>` : `<div class="empty">No hay gastos en ${nombreMes(m)}. Usa el formulario de arriba para anotar el primero.</div>`}
+    </section>`;
+  },
+
+  /* ===== EQUIPO Y REPARTO ===== */
+  equipo(){
+    const m = state.mes, cfg = C(), r = resumenMes(m), nm = state.nomina[m] || { pagos: {} };
+    const pag = k => !!nm.pagos?.[k];
+    const mb = Math.max(0, r.margenBruto), rep = cfg.reparto;
+    const lines = [
+      ['cm', 'Community manager', r.cm, r.cl.map(c => esc(c.nombre) + ' (' + usd(plan(c.plan).cm) + ')').join(', ')],
+      ['video', 'Video maker (sueldo fijo)', r.video, `${pautasActivas()} pautas este mes · ${usdt(costoPautaVideo())} por pauta`],
+      ['direccion', 'Tu sueldo · dirección y social media', mb * rep.direccion / 100, `${rep.direccion}% del margen`],
+      ['estrategia', 'Sueldo estratega', mb * rep.estrategia / 100, `${rep.estrategia}% del margen`],
+      ['reserva', 'Fondo de reserva', mb * rep.reserva / 100, `${rep.reserva}% del margen · para imprevistos y meses flojos`],
+      ['reinversion', 'Reinversión de la agencia', mb * rep.reinversion / 100, `${rep.reinversion}% del margen · equipos, publicidad propia`]
+    ];
+    const totalPag = lines.reduce((s, l) => s + l[2], 0);
+    return `
+    <div class="head"><div><h1>Equipo y reparto · ${nombreMes(m)}</h1><p class="lede">Pagos en USDT del día ${cfg.diaCobro}. El community y el video maker cobran primero; los sueldos de ustedes dos salen del margen que queda después de cubrir todos los costos.</p></div>${mesPicker()}</div>
+    <div class="kpis">
+      <div class="kpi"><span class="lab">Margen para repartir</span><span class="val">${nf2.format(r.margenBruto)}</span><span class="sub">USDT · ${r.pendientes.length ? 'incluye lo que falta por cobrar' : 'todo cobrado'}</span></div>
+      <div class="kpi"><span class="lab">Equipo de producción</span><span class="val">${nf2.format(r.cm + r.video)}</span><span class="sub">USDT · community + video</span></div>
+      <div class="kpi"><span class="lab">Pagos marcados</span><span class="val">${lines.filter(l => pag(l[0])).length}/${lines.length}</span><span class="sub">del mes</span></div>
+    </div>
+    <section class="card"><div class="tbl"><table>
+      <thead><tr><th>Pago</th><th>Cómo se calcula</th><th class="r">USDT</th><th class="r">Estado</th></tr></thead>
+      <tbody>${lines.map(([k, n, v, d]) => `<tr><td><strong>${n}</strong></td><td class="muted" style="font-size:13px">${d}</td><td class="r num">${nf2.format(v)}</td>
+        <td class="r"><button class="btn sm ${pag(k) ? '' : 'pri'}" data-paynom="${k}">${pag(k) ? 'Pagado ✓' : 'Marcar pagado'}</button></td></tr>`).join('')}</tbody>
+      <tfoot><tr><td colspan="2">Total a distribuir</td><td class="r num">${nf2.format(totalPag)}</td><td></td></tr></tfoot>
+    </table></div>
+    <p class="muted" style="font-size:13px;margin:10px 0 0">Herramientas (${usdt(r.herr)}) y gastos de traslado (${usdt(r.gastosMov)}) ya están descontados antes del reparto. Cambia los porcentajes en Ajustes.</p></section>`;
+  },
+
+  /* ===== PLANES Y PRECIOS ===== */
+  planes(){
+    const cfg = C(), t = tasa();
+    const rows = cfg.planes.map(p => {
+      const pp = precioPlan(p), n = activos().filter(c => c.plan === p.id).length, low = pp.lista < pp.recomendado;
+      return `<tr>
+        <td><strong>${esc(p.nombre)}</strong><div class="muted" style="font-size:12px">${n} cliente(s) · ${p.pautas} pauta(s)</div></td>
+        <td class="r"><input class="mini" type="number" step="1" min="0" id="cm-${p.id}" data-plan="${p.id}" data-field="cm" value="${p.cm}" aria-label="Pago community ${esc(p.nombre)}"></td>
+        <td class="r num">${nf2.format(pp.cost.video)}</td>
+        <td class="r num">${nf2.format(pp.cost.mov)}</td>
+        <td class="r num">${nf2.format(pp.cost.herr)}</td>
+        <td class="r num"><strong>${nf2.format(pp.cost.total)}</strong></td>
+        <td class="r"><input class="mini" type="number" step="1" min="0" id="base-${p.id}" data-plan="${p.id}" data-field="base" value="${p.base}" aria-label="USDT que quieres recibir ${esc(p.nombre)}"></td>
+        <td class="r num">${nf2.format(pp.necesario)}</td>
+        <td class="r num"><strong>${usd(pp.recomendado)}</strong></td>
+        <td class="r"><input class="mini" type="number" step="1" min="0" id="lista-${p.id}" data-plan="${p.id}" data-field="lista" value="${p.lista}" aria-label="Precio vigente ${esc(p.nombre)}" style="${low ? 'border-color:var(--warn)' : ''}"></td>
+        <td class="r num">${t ? bs(pp.bsHoy) : '—'}</td>
+        <td class="r num">${nf2.format(pp.recibes)}</td>
+        <td class="r"><span class="chip ${pp.margen >= cfg.margen / 100 ? 'ok' : pp.margen >= cfg.margen / 100 - 0.08 ? 'warn' : 'bad'}">${pct(pp.margen)}</span></td>
+        <td class="r">${low ? `<button class="btn sm" data-userec="${p.id}">Usar ${usd(pp.recomendado)}</button>` : ''}</td></tr>`;
+    }).join('');
+    const f = factor();
+    return `
+    <div class="head"><div><h1>Planes y precios</h1><p class="lede">Cada plan se cotiza en dólares BCV. El precio sube lo justo para que, al convertir los bolívares a USDT, te quede el mismo dinero real que antes y se cumpla el margen de ${cfg.margen}%.</p></div>
+      ${cfg.planes.some(p => precioPlan(p).lista < precioPlan(p).recomendado) ? `<button class="btn pri" data-userec="all">Actualizar todos al recomendado</button>` : ''}</div>
+    <section class="card"><div class="tbl"><table>
+      <thead><tr><th>Plan</th><th class="r">Community</th><th class="r">Video</th><th class="r">Traslados</th><th class="r">Herram.</th><th class="r">Costo</th><th class="r">Quieres recibir USDT</th><th class="r">Mínimo USDT</th><th class="r">Recomendado</th><th class="r">Vigente $ BCV</th><th class="r">En Bs hoy</th><th class="r">Recibes USDT</th><th class="r">Margen</th><th></th></tr></thead>
+      <tbody>${rows}</tbody></table></div>
+      <p class="muted" style="font-size:13px;margin:10px 0 0">Costos en USDT por cliente al mes. Escribe cuántos USDT quieres recibir por plan y el sistema calcula el precio en $ BCV que le cobras al cliente. Si la brecha sube, el recomendado sube para que sigas recibiendo lo mismo.</p></section>
+    <div class="grid g2">
+      <section class="card"><h2>Cómo se calcula</h2>
+        <div class="formula">Mínimo USDT = Costo ÷ (1 − ${cfg.margen}%)<br>Recomendado $ BCV = mayor(Mínimo, Quieres recibir) × (USDT ÷ BCV) × (1 + ${cfg.colchon}%)<br>Recibes USDT = Vigente × BCV ÷ USDT</div>
+        <p class="muted" style="font-size:14px">Hoy el factor de conversión es <strong class="num">${nf2.format(f)}</strong>: por cada dólar BCV que cobras, te llegan ${nf2.format(1 / f)} USDT. El colchón de ${cfg.colchon}% te protege si la brecha sube entre que fijas el precio y el día de cobro. Redondeo a múltiplos de $${cfg.redondeo}.</p></section>
+      <section class="card"><h2>Cuándo revisar los precios</h2>
+        <p style="margin:0 0 8px">Revisa esta pantalla cada día 1, antes de enviar los cobros. Si la brecha sube y aparece "Usar…" en algún plan, actualiza el precio de ese mes.</p>
+        <p class="muted" style="margin:0;font-size:14px">El video maker se reparte por pauta (${usdt(costoPautaVideo())} cada una con ${pautasActivas()} pautas al mes) y las herramientas entre ${activos().length} clientes activos. Si entran más clientes, esos costos por cliente bajan.</p></section>
+    </div>`;
+  },
+
+  /* ===== CLIENTES ===== */
+  clientes(){
+    const cfg = C(), ed = state.editCliente;
+    const form = (c = {}) => `
+      <form class="form" id="cliForm" data-id="${c.id || ''}">
+        <label class="f" for="cNom">Nombre del cliente<input id="cNom" type="text" required value="${esc(c.nombre || '')}"></label>
+        <label class="f" for="cPlan">Plan<select id="cPlan">${cfg.planes.map(p => `<option value="${p.id}" ${c.plan === p.id ? 'selected' : ''}>${esc(p.nombre)}</option>`).join('')}</select></label>
+        <label class="f" for="cPago">Paga en<select id="cPago"><option value="usdt" ${c.pago !== 'bs' ? 'selected' : ''}>USDT</option><option value="bs" ${c.pago === 'bs' ? 'selected' : ''}>Bolívares (BCV)</option></select></label>
+        <label class="f" for="cEst">Estado<select id="cEst"><option value="activo" ${c.estado !== 'pausado' ? 'selected' : ''}>Activo</option><option value="pausado" ${c.estado === 'pausado' ? 'selected' : ''}>Pausado</option></select></label>
+        <label class="f" for="cTel">WhatsApp<input id="cTel" type="tel" placeholder="+58 414…" value="${esc(c.telefono || '')}"></label>
+        <label class="f" for="cDesde">Cliente desde<input id="cDesde" type="month" value="${esc(c.desde || '')}"></label>
+        <div class="row"><button class="btn pri" type="submit">${c.id ? 'Guardar cambios' : 'Agregar cliente'}</button>${c.id ? `<button class="btn ghost" type="button" data-canceledit>Cancelar</button>` : ''}</div>
+      </form>`;
+    const editing = ed ? state.clientes.find(c => c.id === ed) : null;
+    const rows = state.clientes.map(c => { const p = plan(c.plan), pp = p ? precioPlan(p) : null; return `<tr>
+      <td><strong>${esc(c.nombre)}</strong>${c.telefono ? `<div class="muted num" style="font-size:12px">${esc(c.telefono)}</div>` : ''}</td>
+      <td>${p ? `<span class="chip plan">${esc(p.nombre)}</span>` : '<span class="chip bad">Sin plan</span>'}</td>
+      <td>${c.pago === 'bs' ? 'Bolívares' : 'USDT'}</td>
+      <td>${c.estado === 'pausado' ? '<span class="chip neu">Pausado</span>' : '<span class="chip ok">Activo</span>'}</td>
+      <td class="r num">${pp ? usd(pp.lista) : '—'}</td>
+      <td class="r num">${pp ? nf2.format(pp.recibes) : '—'}</td>
+      <td class="r"><div class="row" style="justify-content:flex-end"><button class="btn sm" data-editcli="${c.id}">Editar</button>
+        ${state.confirmDel === c.id ? `<button class="btn sm danger" data-delcli="${c.id}">Borrar ${esc(c.nombre)}</button><button class="btn sm ghost" data-canceldel>No</button>` : `<button class="btn sm ghost danger" data-askdel="${c.id}">Borrar</button>`}</div></td></tr>`; }).join('');
+    const counts = cfg.planes.map(p => `${esc(p.nombre)} ${activos().filter(c => c.plan === p.id).length}`).join(' · ');
+    return `
+    <div class="head"><div><h1>Clientes</h1><p class="lede">${activos().length} activos · ${counts}</p></div></div>
+    <section class="card"><h2>${editing ? 'Editar ' + esc(editing.nombre) : 'Nuevo cliente'}</h2>${form(editing || {})}</section>
+    <section class="card">${state.clientes.length ? `<div class="tbl"><table>
+      <thead><tr><th>Cliente</th><th>Plan</th><th>Paga en</th><th>Estado</th><th class="r">Precio $ BCV</th><th class="r">Recibes USDT</th><th></th></tr></thead>
+      <tbody>${rows}</tbody></table></div>` : `<div class="empty">Todavía no hay clientes. Agrega el primero con el formulario de arriba.</div>`}</section>`;
+  },
+
+  /* ===== TASAS ===== */
+  tasas(){
+    const t = tasa();
+    return `
+    <div class="head"><div><h1>Tasas del día</h1><p class="lede">El sistema busca solo la tasa BCV oficial y el precio del USDT en Binance P2P cada mañana. Si un día quieres usar otra, cárgala aquí: la tuya tiene prioridad.</p></div></div>
+    <section class="card"><h2>Actualizar tasa</h2>
+      <form class="form" id="tasaForm">
+        <label class="f" for="tFecha">Fecha<input id="tFecha" type="date" value="${hoy()}" required></label>
+        <label class="f" for="tBcv">Dólar BCV (Bs)<input id="tBcv" type="number" step="0.0001" min="0" inputmode="decimal" required value="${t ? t.bcv : ''}"></label>
+        <label class="f" for="tUsdt">USDT (Bs)<input id="tUsdt" type="number" step="0.01" min="0" inputmode="decimal" required value="${t ? t.usdt : ''}"></label>
+        <button class="btn pri" type="submit">Guardar tasa</button>
+      </form>
+      <div class="row" style="margin-top:10px"><button class="btn sm" data-autotasa>Buscar tasas de hoy automáticamente</button><span class="muted" style="font-size:13px">También se buscan solas cada día a las 9 am.</span></div>
+      <p class="muted" style="font-size:13px;margin:8px 0 0">Para el USDT usa el precio al que tú vendes en el P2P, no el de compra: es lo que realmente te dan por cada USDT.</p></section>
+    <div class="grid g2">
+      <section class="card"><h2>Convertidor</h2>
+        <div class="form"><label class="f" for="cvMonto">Monto<input id="cvMonto" type="number" step="0.01" value="100" inputmode="decimal"></label>
+        <label class="f" for="cvDe">Está en<select id="cvDe"><option value="bcv">$ BCV</option><option value="usdt">USDT</option><option value="bs">Bolívares</option></select></label></div>
+        <div class="split" id="cvOut" style="margin-top:10px"></div></section>
+      <section class="card"><h2>Historial</h2>${state.tasas.length ? `<div class="tbl"><table><thead><tr><th>Fecha</th><th class="r">BCV</th><th class="r">USDT</th><th class="r">Brecha</th><th>Fuente</th><th></th></tr></thead><tbody>
+        ${state.tasas.slice(0, 15).map(x => `<tr><td class="num">${esc(x.fecha)}</td><td class="r num">${nf2.format(x.bcv)}</td><td class="r num">${nf2.format(x.usdt)}</td><td class="r num">${nf2.format((x.usdt / x.bcv - 1) * 100)}%</td><td class="muted" style="font-size:12px">${esc(x.fuente || '')}</td><td class="r"><button class="btn sm ghost danger" data-deltasa="${x.id}">Borrar</button></td></tr>`).join('')}
+        </tbody></table></div>` : `<p class="muted">Sin tasas registradas.</p>`}</section>
+    </div>`;
+  },
+
+  /* ===== AJUSTES ===== */
+  ajustes(){
+    const cfg = C(), rep = cfg.reparto, sumRep = num(rep.direccion) + num(rep.estrategia) + num(rep.reserva) + num(rep.reinversion);
+    const fld = (id, label, key, step = 1, help = '') => `<label class="f" for="${id}">${label}<input id="${id}" type="number" step="${step}" min="0" data-cfg="${key}" value="${cfg[key]}">${help ? `<span style="font-weight:400;font-size:12px">${help}</span>` : ''}</label>`;
+    return `
+    <div class="head"><div><h1>Ajustes</h1><p class="lede">Los números con los que el sistema calcula precios, costos y sueldos. Cada cambio se guarda al salir del campo.</p></div></div>
+    <section class="card"><h2>Precios</h2><div class="form">
+      ${fld('aMargen','Margen objetivo (%)','margen',1,'Sobre lo que recibes, después de costos de producción')}
+      ${fld('aColchon','Colchón cambiario (%)','colchon',0.5,'Protege si la brecha sube antes del cobro')}
+      ${fld('aRedondeo','Redondear precios a ($)','redondeo',1)}
+      ${fld('aDia','Día de cobro','diaCobro',1)}
+    </div></section>
+    <section class="card"><h2>Costos de producción</h2><div class="form">
+      ${fld('aVideo','Sueldo video maker (USDT/mes)','sueldoVideo',1)}
+      ${fld('aViat','Presupuesto de traslado por pauta (USDT)','viaticoPauta',0.5,'Taxi, gasolina y gastos de cada grabación')}
+    </div>
+    <h2 style="margin-top:18px">Herramientas mensuales</h2>
+    <div class="grid">${cfg.herramientas.map((h, i) => `<div class="row"><input type="text" id="hn-${h.id}" data-herr="${i}" data-hf="nombre" value="${esc(h.nombre)}" aria-label="Nombre de la herramienta" style="flex:1 1 160px"><input type="number" id="hm-${h.id}" class="mini" data-herr="${i}" data-hf="monto" value="${h.monto}" aria-label="Costo mensual"><button class="btn sm ghost danger" data-delherr="${i}">Quitar</button></div>`).join('')}
+    <div><button class="btn sm" data-addherr>Agregar herramienta</button></div></div></section>
+    <section class="card"><h2>Reparto del margen</h2><div class="form">
+      ${['direccion|Tu sueldo (%)','estrategia|Estratega (%)','reserva|Fondo de reserva (%)','reinversion|Reinversión (%)'].map(s => { const [k, l] = s.split('|'); return `<label class="f" for="r-${k}">${l}<input id="r-${k}" type="number" step="1" min="0" data-rep="${k}" value="${rep[k]}"></label>`; }).join('')}
+    </div>
+    <p style="margin:10px 0 0" class="${sumRep === 100 ? 'muted' : ''}">${sumRep === 100 ? 'Suma 100%.' : `<span class="chip bad">Suma ${sumRep}%</span> Ajusta para que sume 100%.`}</p></section>
+    <section class="card"><h2>Planes</h2><p class="muted" style="margin:0 0 10px;font-size:14px">Cuántas pautas (grabaciones) incluye cada plan al mes, por cliente. No es la cantidad de clientes: eso se cuenta solo desde Clientes.</p>
+      <div class="form">${cfg.planes.map(p => `<label class="f" for="pa-${p.id}">${esc(p.nombre)}<input id="pa-${p.id}" type="number" step="1" min="0" data-plan="${p.id}" data-field="pautas" value="${p.pautas}"></label>`).join('')}</div></section>
+    <section class="card"><h2>Conexión</h2><p class="muted" style="margin:0 0 10px;font-size:14px">Los datos viven en tu Google Sheet. Este navegador guarda la URL y la clave para no pedírtelas cada vez.</p>
+      <button class="btn sm danger" data-logout>Desconectar este navegador</button></section>`;
+  }
+};
+
+
+function setupView(){
+  const c = Store.conf() || {};
+  return `
+  <div class="head"><div><h1>Conectar con tu Google Sheet</h1><p class="lede">Pega la URL de la aplicación web del Apps Script y tu clave. Se guardan solo en este navegador; en otro teléfono o computadora las vuelves a pegar una vez.</p></div></div>
+  <section class="card"><form class="form" id="setupForm" style="grid-template-columns:1fr">
+    <label class="f" for="sUrl">URL de la aplicación web<input id="sUrl" type="url" required placeholder="https://script.google.com/macros/s/…/exec" value="${esc(c.url || '')}"></label>
+    <label class="f" for="sKey">Clave<input id="sKey" type="password" required autocomplete="current-password" value="${esc(c.key || '')}"></label>
+    ${state.setupError ? `<div class="alert bad">${esc(state.setupError)}</div>` : ''}
+    <div><button class="btn pri" type="submit">Conectar</button></div>
+  </form></section>`;
+}
+
+function payForm(c, cb){
+  const t = tasa(); const bsAmt = t ? cb.montoBCV * t.bcv : 0; const eqU = cb.montoBCV / factor();
+  const isBs = c.pago === 'bs';
+  return `<form class="paybox" data-payfor="${c.id}">
+    <div class="form">
+      <label class="f" for="pMet-${c.id}">Pagó en<select id="pMet-${c.id}" name="metodo"><option value="usdt" ${!isBs ? 'selected' : ''}>USDT</option><option value="bs" ${isBs ? 'selected' : ''}>Bolívares</option></select></label>
+      <label class="f" for="pMon-${c.id}">Monto recibido<input id="pMon-${c.id}" name="monto" type="number" step="0.01" inputmode="decimal" value="${(isBs ? bsAmt : eqU).toFixed(2)}"></label>
+      <label class="f" for="pUsdt-${c.id}">Tasa USDT para convertir Bs<input id="pUsdt-${c.id}" name="tusdt" type="number" step="0.01" value="${t ? t.usdt : ''}"></label>
+      <label class="f" for="pFecha-${c.id}">Fecha<input id="pFecha-${c.id}" name="fecha" type="date" value="${hoy()}"></label>
+      <button class="btn pri" type="submit">Confirmar pago</button>
+    </div>
+    <span class="muted" style="font-size:13px">Debe pagar ${usd(cb.montoBCV)} BCV = ${t ? bs(bsAmt) : '—'} o ${usdt(eqU)}. Si paga en Bs, conviértelos a USDT el mismo día.</span>
+  </form>`;
+}
+
+/* ---------- eventos ---------- */
+document.addEventListener('click', async e => {
+  const b = e.target.closest('button'); if (!b) return;
+  const d = b.dataset;
+  if (d.tab) { state.tab = d.tab; state.openPago = null; render(); window.scrollTo({ top: 0 }); return; }
+  if (d.go) { state.tab = d.go; render(); window.scrollTo({ top: 0 }); return; }
+  if (d.mes) { state.mes = shiftMes(state.mes, +d.mes); state.openPago = null; render(); return; }
+  if (d.openpay) { state.openPago = state.openPago === d.openpay ? null : d.openpay; render(); return; }
+  if (d.unpay) { await Store.del('cobros', cobroId(state.mes, d.unpay)); toast('Pago deshecho'); return; }
+  if (d.copy) {
+    const c = state.clientes.find(x => x.id === d.copy), p = plan(c.plan), cb = cobroDe(state.mes, c), t = tasa();
+    const txt = `Hola, ${c.nombre}. Te escribimos de MULATO EDICIONES para recordarte la mensualidad de ${nombreMes(state.mes)} de tu Plan ${p.nombre}: $${nf2.format(cb.montoBCV)} a tasa BCV.` +
+      (t ? ` Hoy (${t.fecha}) equivale a Bs ${nf2.format(cb.montoBCV * t.bcv)} a tasa BCV de ${nf2.format(t.bcv)}, o ${nf2.format(cb.montoBCV / factor())} USDT.` : '') + ` ¡Gracias por seguir creciendo con nosotros!`;
+    try { await navigator.clipboard.writeText(txt); toast('Mensaje copiado. Pégalo en WhatsApp.'); }
+    catch(err) { const ta = document.createElement('textarea'); ta.value = txt; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); toast('Mensaje copiado.'); } catch(e2) { toast('Selecciona y copia el texto manualmente.'); } ta.remove(); }
+    return;
+  }
+  if (d.paynom) {
+    const m = state.mes, cur = state.nomina[m] || { pagos: {} }; const pagos = { ...(cur.pagos || {}) }; pagos[d.paynom] = !pagos[d.paynom];
+    await Store.set('nomina', m, { mes: m, pagos }); return;
+  }
+  if (d.userec) {
+    const cfg = cfgCopy(); cfg.planes.forEach(p => { if (d.userec === 'all' || d.userec === p.id) { const pp = precioPlan(p); if (pp.lista < pp.recomendado) p.lista = pp.recomendado; } });
+    await saveConfig(cfg); toast('Precios actualizados'); return;
+  }
+  if (d.editcli) { state.editCliente = d.editcli; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+  if (d.canceledit !== undefined) { state.editCliente = null; render(); return; }
+  if (d.askdel) { state.confirmDel = d.askdel; render(); return; }
+  if (d.canceldel !== undefined) { state.confirmDel = null; render(); return; }
+  if (d.delcli) { state.confirmDel = null; await Store.del('clientes', d.delcli); toast('Cliente borrado'); return; }
+  if (d.delgasto) { await Store.del('gastos', d.delgasto); toast('Gasto borrado'); return; }
+  if (d.deltasa) { await Store.del('tasas', d.deltasa); toast('Tasa borrada'); return; }
+  if (d.autotasa !== undefined) {
+    b.disabled = true; b.textContent = 'Buscando…';
+    try { const r = await Store.call({ action: 'tasasHoy' }); toast(r.nota || 'Tasa de hoy cargada'); }
+    catch(err) { toast(err.message === 'clave' ? 'Clave incorrecta' : 'No se pudo traer la tasa: ' + err.message); }
+    await Store.refresh(); return;
+  }
+  if (d.logout !== undefined) { try { localStorage.removeItem('mulato-api'); localStorage.removeItem('mulato-cache'); } catch(e) {} state.mode = 'setup'; render(); return; }
+  if (d.addherr !== undefined) { const cfg = cfgCopy(); cfg.herramientas.push({ id: uid().slice(0, 8), nombre: 'Nueva herramienta', monto: 0 }); await saveConfig(cfg); return; }
+  if (d.delherr) { const cfg = cfgCopy(); cfg.herramientas.splice(+d.delherr, 1); await saveConfig(cfg); return; }
+});
+
+document.addEventListener('change', async e => {
+  const el = e.target, d = el.dataset;
+  if (d.plan && d.field) { const cfg = cfgCopy(); const p = cfg.planes.find(x => x.id === d.plan); p[d.field] = num(el.value); await saveConfig(cfg); return; }
+  if (d.cfg) { const cfg = cfgCopy(); cfg[d.cfg] = num(el.value); await saveConfig(cfg); return; }
+  if (d.rep) { const cfg = cfgCopy(); cfg.reparto[d.rep] = num(el.value); await saveConfig(cfg); return; }
+  if (d.herr !== undefined) { const cfg = cfgCopy(); const h = cfg.herramientas[+d.herr]; h[d.hf] = d.hf === 'monto' ? num(el.value) : el.value; await saveConfig(cfg); return; }
+});
+document.addEventListener('input', e => { if (e.target.id === 'cvMonto' || e.target.id === 'cvDe') convert(); });
+document.addEventListener('change', e => { if (e.target.id === 'cvDe') convert(); });
+
+function convert(){
+  const out = $('#cvOut'); if (!out) return; const t = tasa();
+  if (!t) { out.innerHTML = '<p class="muted">Carga una tasa para convertir.</p>'; return; }
+  const v = num($('#cvMonto').value), de = $('#cvDe').value;
+  const enBs = de === 'bs' ? v : de === 'bcv' ? v * t.bcv : v * t.usdt;
+  out.innerHTML = `<div class="line"><span>Bolívares</span><span class="num">${bs(enBs)}</span></div><div class="line"><span>$ BCV</span><span class="num">${usd(enBs / t.bcv)}</span></div><div class="line"><span>USDT</span><span class="num">${usdt(enBs / t.usdt)}</span></div>`;
+}
+
+document.addEventListener('submit', async e => {
+  e.preventDefault(); const f = e.target;
+  if (f.id === 'setupForm') {
+    const url = $('#sUrl').value.trim(), key = $('#sKey').value.trim();
+    if (!/^https:\/\/script\.google(usercontent)?\.com\//.test(url)) { state.setupError = 'La URL debe empezar por https://script.google.com/macros/s/…'; render(); return; }
+    Store.url = url; Store.key = key; state.setupError = '';
+    try { await Store.call({ action: 'all' }); }
+    catch(err) { state.setupError = err.code === 'clave' ? 'La clave no coincide con la del Apps Script.' : 'No se pudo conectar. Revisa que la URL sea la de la aplicación web y que el acceso diga "Cualquier usuario".'; render(); return; }
+    try { localStorage.setItem('mulato-api', JSON.stringify({ url, key })); } catch(e2) {}
+    toast('Conectado'); await Store.start(); return;
+  }
+  if (f.id === 'tasaForm') {
+    const fecha = $('#tFecha').value, bcv = num($('#tBcv').value), us = num($('#tUsdt').value);
+    if (!fecha || bcv <= 0 || us <= 0) { toast('Escribe la tasa BCV y la USDT, ambas mayores que cero.'); return; }
+    await Store.set('tasas', fecha, { fecha, bcv, usdt: us, fuente: 'manual' }); toast('Tasa guardada'); return;
+  }
+  if (f.id === 'gastoForm') {
+    const t = tasa(), monto = num($('#gMonto').value), mon = $('#gMon').value, fecha = $('#gFecha').value;
+    if (monto <= 0) { toast('Escribe un monto mayor que cero.'); return; }
+    if (mon === 'bs' && !t) { toast('Carga la tasa del día para convertir bolívares.'); return; }
+    const montoUSDT = mon === 'bs' ? monto / t.usdt : monto;
+    await Store.set('gastos', uid(), { fecha, mes: mesDe(fecha), categoria: $('#gCat').value, clienteId: $('#gCli').value || null, montoOriginal: monto, moneda: mon, montoUSDT: Math.round(montoUSDT * 100) / 100, nota: $('#gNota').value.trim() });
+    toast('Gasto agregado'); return;
+  }
+  if (f.id === 'cliForm') {
+    const nombre = $('#cNom').value.trim(); if (!nombre) { toast('Escribe el nombre del cliente.'); return; }
+    const id = f.dataset.id || uid(); const prev = state.clientes.find(c => c.id === id) || {};
+    await Store.set('clientes', id, { ...prev, id: undefined, nombre, plan: $('#cPlan').value, pago: $('#cPago').value, estado: $('#cEst').value, telefono: $('#cTel').value.trim(), desde: $('#cDesde').value, orden: prev.orden ?? 50 });
+    state.editCliente = null; toast(f.dataset.id ? 'Cambios guardados' : 'Cliente agregado'); render(); return;
+  }
+  if (f.dataset.payfor) {
+    const cid = f.dataset.payfor, c = state.clientes.find(x => x.id === cid), cb = cobroDe(state.mes, c), t = tasa();
+    const metodo = f.metodo.value, monto = num(f.monto.value), tus = num(f.tusdt.value) || (t ? t.usdt : 0);
+    if (monto <= 0) { toast('Escribe el monto recibido.'); return; }
+    if (metodo === 'bs' && !tus) { toast('Falta la tasa USDT para convertir los bolívares.'); return; }
+    const recibidoUSDT = metodo === 'bs' ? monto / tus : monto;
+    await Store.set('cobros', cobroId(state.mes, cid), { mes: state.mes, clienteId: cid, estado: 'pagado', montoBCV: cb.montoBCV, metodo, montoRecibido: monto, tasaUSDT: tus, tasaBCV: t ? t.bcv : null, recibidoUSDT: Math.round(recibidoUSDT * 100) / 100, fechaPago: f.fecha.value });
+    state.openPago = null; toast('Pago registrado'); render(); return;
+  }
+});
+
+/* clean undefined id before saving */
+const _set = Store.set.bind(Store);
+Store.set = (col, id, data) => { const clean = JSON.parse(JSON.stringify(data)); return _set(col, id, clean); };
+
+render();
+Store.start();
+const _render = render;
+render = function(){ _render(); if (state.tab === 'tasas') convert(); };
+</script>
+</body>
+</html>
