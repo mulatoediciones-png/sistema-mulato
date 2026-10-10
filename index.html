@@ -305,13 +305,15 @@ const inicioMes = () => { const v = num(C().inicio); return v >= 200001 ? numMes
 const sortTasas = a => a.sort((x, y) => x.fecha < y.fecha ? 1 : -1);
 const sortCli = a => a.sort((x, y) => (x.orden ?? 99) - (y.orden ?? 99) || String(x.nombre).localeCompare(String(y.nombre)));
 const PAGOS = ['cm','video','direccion','estrategia','reserva','reinversion'];
+/* Dirección del Apps Script (sin usuario y clave no devuelve nada) */
+const API_URL = 'https://script.google.com/macros/s/AKfycbx0h7WcCw0C145f0IP3Lg0D1u6nNiUgV4hssmzYfsbC7ue2J3Mfu3obUXY67WW9GuFI/exec';
 const Store = {
-  url: '', key: '', busy: 0, q: Promise.resolve(),
-  conf(){ try { return JSON.parse(localStorage.getItem('mulato-api') || 'null'); } catch(e) { return null; } },
+  url: API_URL, user: '', key: '', busy: 0, q: Promise.resolve(),
+  conf(){ try { return JSON.parse(localStorage.getItem('mulato-sesion') || 'null'); } catch(e) { return null; } },
   async start(){
     const c = this.conf();
-    if (!c || !c.url || !c.key) { state.mode = 'setup'; state.loaded = true; render(); return; }
-    this.url = c.url; this.key = c.key; state.mode = 'sheet';
+    if (!c || !c.user || !c.key) { state.mode = 'setup'; state.loaded = true; render(); return; }
+    this.user = c.user; this.key = c.key; state.mode = 'sheet';
     try { const cache = JSON.parse(localStorage.getItem('mulato-cache') || 'null'); if (cache) { this.ingest(cache); state.loaded = true; render(); } } catch(e) {}
     await this.refresh();
     if (!this.timer) {
@@ -320,7 +322,7 @@ const Store = {
     }
   },
   async call(payload){
-    const r = await fetch(this.url, { method: 'POST', body: JSON.stringify({ key: this.key, ...payload }) });
+    const r = await fetch(this.url, { method: 'POST', body: JSON.stringify({ user: this.user, key: this.key, ...payload }) });
     const j = await r.json();
     if (!j.ok) { const e = new Error(j.error || 'error'); e.code = j.error; throw e; }
     return j;
@@ -331,7 +333,7 @@ const Store = {
       this.ingest(j.data); state.offline = false;
       try { localStorage.setItem('mulato-cache', JSON.stringify(j.data)); } catch(e) {}
     } catch(e) {
-      if (e.code === 'clave') { state.mode = 'setup'; state.setupError = 'La clave no coincide con la del Apps Script.'; }
+      if (e.code === 'clave' || e.code === 'bloqueado') { state.mode = 'setup'; state.setupError = e.code === 'bloqueado' ? 'Demasiados intentos fallidos. Espera 10 minutos y vuelve a intentar.' : 'Tu sesión ya no es válida. Entra de nuevo con tu usuario y clave.'; try { localStorage.removeItem('mulato-sesion'); } catch(e2) {} }
       else state.offline = true;
     }
     state.loaded = true; scheduleRender();
@@ -877,20 +879,19 @@ const VIEWS = {
       <h2 style="margin:20px 0 6px">Pautas por plan</h2><p class="muted" style="margin:0 0 10px;font-size:13.5px">Grabaciones que incluye cada plan al mes, por cliente.</p>
       <div class="form">${cfg.planes.map(p => `<label class="f" for="pa-${p.id}">${esc(p.nombre)}<input id="pa-${p.id}" type="number" step="1" min="0" data-plan="${p.id}" data-field="pautas" value="${p.pautas}"></label>`).join('')}</div></section>
     </div>
-    <section class="card"><div class="card-h"><div><h2>Conexión</h2><p>Los datos viven en tu Google Sheet. Este navegador guarda la URL y la clave para no pedírtelas cada vez.</p></div><button class="btn sm danger" data-logout>Desconectar este navegador</button></div></section>`;
+    <section class="card"><div class="card-h"><div><h2>Sesión</h2><p>Entraste como <b>${esc(Store.user)}</b>. Este navegador recuerda tu sesión; ciérrala si usas un equipo prestado.</p></div><button class="btn sm danger" data-logout>Cerrar sesión</button></div></section>`;
   }
 };
 
 function setupView(){
-  const c = Store.conf() || {};
   return `<div class="setup"><section class="card">
     <img src="assets/logo-480.png" alt="Mulato Ediciones" width="200" height="52">
-    <div><h1 style="font-size:22px">Conectar con tu Google Sheet</h1><p class="lede">Pega la URL de la aplicación web del Apps Script y tu clave. Se guardan solo en este navegador; en otro dispositivo las pegas una vez.</p></div>
+    <div><h1 style="font-size:22px">Entrar</h1><p class="lede">Sistema administrativo de la agencia.</p></div>
     <form class="form" id="setupForm" style="grid-template-columns:1fr">
-      <label class="f" for="sUrl">URL de la aplicación web<input id="sUrl" type="url" required placeholder="https://script.google.com/macros/s/…/exec" value="${esc(c.url || '')}"></label>
-      <label class="f" for="sKey">Clave<input id="sKey" type="password" required autocomplete="current-password" value="${esc(c.key || '')}"></label>
+      <label class="f" for="sUser">Usuario<input id="sUser" type="text" required autocomplete="username" autocapitalize="none" spellcheck="false"></label>
+      <label class="f" for="sKey">Clave<input id="sKey" type="password" required autocomplete="current-password"></label>
       ${state.setupError ? alertBox(['bad', esc(state.setupError)]) : ''}
-      <button class="btn pri" type="submit">Conectar</button>
+      <button class="btn pri" type="submit">Entrar</button>
     </form></section></div>`;
 }
 
@@ -954,7 +955,7 @@ document.addEventListener('click', async e => {
     catch(err) { toast(err.message === 'clave' ? 'Clave incorrecta' : 'No se pudo traer la tasa: ' + err.message); }
     await Store.refresh(); return;
   }
-  if (d.logout !== undefined) { try { localStorage.removeItem('mulato-api'); localStorage.removeItem('mulato-cache'); } catch(e) {} state.mode = 'setup'; render(); return; }
+  if (d.logout !== undefined) { try { localStorage.removeItem('mulato-sesion'); localStorage.removeItem('mulato-api'); localStorage.removeItem('mulato-cache'); } catch(e) {} Store.key = ''; state.setupError = ''; state.mode = 'setup'; render(); return; }
   if (d.addherr !== undefined) { const cfg = cfgCopy(); cfg.herramientas.push({ id: uid().slice(0, 8), nombre: 'Nueva herramienta', monto: 0 }); await saveConfig(cfg); return; }
   if (d.delherr) { const cfg = cfgCopy(); cfg.herramientas.splice(+d.delherr, 1); await saveConfig(cfg); return; }
 });
@@ -981,13 +982,13 @@ function convert(){
 document.addEventListener('submit', async e => {
   e.preventDefault(); const f = e.target;
   if (f.id === 'setupForm') {
-    const url = $('#sUrl').value.trim(), key = $('#sKey').value.trim();
-    if (!/^https:\/\/script\.google(usercontent)?\.com\//.test(url)) { state.setupError = 'La URL debe empezar por https://script.google.com/macros/s/…'; render(); return; }
-    Store.url = url; Store.key = key; state.setupError = '';
+    const user = $('#sUser').value.trim().toLowerCase(), key = $('#sKey').value;
+    const btn = f.querySelector('button[type="submit"]'); btn.disabled = true; btn.textContent = 'Entrando…';
+    Store.user = user; Store.key = key; state.setupError = '';
     try { await Store.call({ action: 'all' }); }
-    catch(err) { state.setupError = err.code === 'clave' ? 'La clave no coincide con la del Apps Script.' : 'No se pudo conectar. Revisa que la URL sea la de la aplicación web y que el acceso diga "Cualquier usuario".'; render(); return; }
-    try { localStorage.setItem('mulato-api', JSON.stringify({ url, key })); } catch(e2) {}
-    toast('Conectado'); await Store.start(); return;
+    catch(err) { state.setupError = err.code === 'clave' ? 'Usuario o clave incorrectos.' : err.code === 'bloqueado' ? 'Demasiados intentos fallidos. Espera 10 minutos y vuelve a intentar.' : 'No se pudo conectar. Revisa tu internet e inténtalo de nuevo.'; render(); return; }
+    try { localStorage.setItem('mulato-sesion', JSON.stringify({ user, key })); localStorage.removeItem('mulato-api'); } catch(e2) {}
+    state.tab = 'resumen'; toast('Bienvenido'); await Store.start(); return;
   }
   if (f.id === 'tasaForm') {
     const fecha = $('#tFecha').value, bcv = num($('#tBcv').value), us = num($('#tUsdt').value);

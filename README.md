@@ -20,9 +20,9 @@ Recibes USDT     = Precio $ BCV × tasa BCV ÷ tasa USDT
 
 ## Instalación del Apps Script
 
-1. Abre el Sheet > Extensiones > Apps Script. Pega `apps-script/Code.gs` y cambia `CLAVE`.
+1. Abre el Sheet > Extensiones > Apps Script. Pega `apps-script/Code.gs` y cambia `CLAVE` (y `USUARIO` si quieres otro).
 2. Ejecuta la función `instalar` y acepta los permisos.
 3. Implementar > Nueva implementación > Aplicación web. Ejecutar como: Yo. Acceso: Cualquier usuario.
-4. Abre la página, pega la URL de la aplicación web y la clave.
+4. Abre la página y entra con el usuario (USUARIO en el Apps Script) y tu clave. La URL ya está en `API_URL` dentro de index.html.
 
 Si cambias el código del Apps Script: Implementar > Gestionar implementaciones > editar > Nueva versión (así la URL no cambia).

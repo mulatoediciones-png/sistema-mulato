@@ -3,16 +3,18 @@
  *
  * Instalación (una sola vez):
  *  1. En el Sheet: Extensiones > Apps Script. Borra lo que haya y pega este archivo completo.
- *  2. Cambia CLAVE por tu clave secreta (la misma que escribes en la página).
+ *  2. Cambia CLAVE por tu clave secreta. USUARIO es el nombre con el que entras a la página.
  *  3. Guarda. Arriba elige la función "instalar" y presiona Ejecutar. Acepta los permisos.
  *  4. Implementar > Nueva implementación > tipo "Aplicación web".
  *     Ejecutar como: Yo. Quién tiene acceso: Cualquier usuario.
- *  5. Copia la URL de la aplicación web y pégala en la página junto con tu clave.
+ *  5. La URL de la aplicación web va dentro de index.html (API_URL). Si creas una implementación
+ *     nueva, actualiza esa línea; si solo editas, usa "Nueva versión" para que la URL no cambie.
  *
  * Tus datos nunca salen de este Sheet sin la clave.
  */
 
 const CLAVE = 'PEGA_AQUI_TU_CLAVE';
+const USUARIO = 'mulatoediciones';
 const ZONA = 'America/Caracas';
 
 const HOJAS = {
@@ -31,8 +33,18 @@ function doPost(e) {
   return responder_(body);
 }
 
+// Tras 10 intentos fallidos, el acceso se bloquea 10 minutos.
+const MAX_FALLOS = 10, BLOQUEO_SEG = 600;
 function responder_(p) {
-  if (String(p.key || '') !== clave_()) return json_({ ok: false, error: 'clave' });
+  const cache = CacheService.getScriptCache();
+  const fallos = Number(cache.get('fallos') || 0);
+  if (fallos >= MAX_FALLOS) return json_({ ok: false, error: 'bloqueado' });
+  const userOk = String(p.user || '').trim().toLowerCase() === USUARIO.toLowerCase();
+  if (!userOk || String(p.key || '') !== clave_()) {
+    cache.put('fallos', String(fallos + 1), BLOQUEO_SEG);
+    return json_({ ok: false, error: 'clave' });
+  }
+  if (fallos) cache.remove('fallos');
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
