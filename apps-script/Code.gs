@@ -23,7 +23,7 @@ const HOJAS = {
 };
 // Columnas que siempre se guardan como texto (para que Sheets no las convierta en fechas o números)
 const TEXTO = ['id', 'fecha', 'mes', 'clienteId', 'desde', 'telefono', 'fechaPago', 'nombre', 'plan', 'pago',
-  'estado', 'categoria', 'moneda', 'nota', 'metodo', 'fuente'];
+  'estado', 'categoria', 'moneda', 'nota', 'metodo', 'fuente', 'pausa'];
 
 /* ---------------- API web ---------------- */
 function doGet(e) { return responder_(e && e.parameter ? e.parameter : {}); }
@@ -45,21 +45,27 @@ function responder_(p) {
     return json_({ ok: false, error: 'clave' });
   }
   if (fallos) cache.remove('fallos');
-  const lock = LockService.getScriptLock();
-  lock.waitLock(20000);
   try {
-    switch (p.action) {
-      case 'all': return json_({ ok: true, data: leerTodo_() });
-      case 'set': guardarFila_(p.col, p.id, p.data || {}); return json_({ ok: true });
-      case 'del': borrarFila_(p.col, p.id); return json_({ ok: true });
-      case 'config': guardarConfig_(p.data || {}); return json_({ ok: true });
-      case 'tasasHoy': lock.releaseLock(); return json_(actualizarTasas());
-      default: return json_({ ok: false, error: 'accion' });
+    migrarSiHaceFalta_();
+    // Las lecturas no esperan turno; solo las escrituras se hacen de una en una.
+    if (p.action === 'all') return json_({ ok: true, data: leerTodo_() });
+    if (p.action === 'tasasHoy') return json_(actualizarTasas());
+    const lock = LockService.getScriptLock();
+    if (!lock.tryLock(28000)) return json_({ ok: false, error: 'ocupado' });
+    try {
+      switch (p.action) {
+        case 'set': guardarFila_(p.col, p.id, p.data || {}); break;
+        case 'del': borrarFila_(p.col, p.id); break;
+        case 'config': guardarConfig_(p.data || {}); break;
+        default: return json_({ ok: false, error: 'accion' });
+      }
+      SpreadsheetApp.flush();
+      return json_({ ok: true });
+    } finally {
+      lock.releaseLock();
     }
   } catch (err) {
     return json_({ ok: false, error: String(err && err.message || err) });
-  } finally {
-    try { lock.releaseLock(); } catch (e2) {}
   }
 }
 
@@ -123,14 +129,24 @@ function guardarFila_(col, id, data) {
   const nombre = HOJAS[col];
   if (!nombre || !id) throw new Error('Datos incompletos');
   const sh = hoja_(nombre);
-  const head = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
   const obj = Object.assign({}, data, { id: id });
+  asegurarColumnas_(sh, Object.keys(obj));
+  const head = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
   const fila = head.map(h => (obj[h] === undefined || obj[h] === null) ? '' : obj[h]);
   let n = buscar_(sh, id);
   if (n < 0) n = sh.getLastRow() + 1;
   const rango = sh.getRange(n, 1, 1, head.length);
   rango.setNumberFormats([head.map(h => TEXTO.indexOf(h) >= 0 ? '@' : 'General')]);
   rango.setValues([fila]);
+}
+
+// Si llega un dato nuevo (por ejemplo "pausa"), agrega su columna al final de la pestaña.
+function asegurarColumnas_(sh, campos) {
+  const head = sh.getRange(1, 1, 1, Math.max(1, sh.getLastColumn())).getValues()[0].map(String);
+  campos.filter(k => /^[A-Za-z][A-Za-z0-9]*$/.test(k) && head.indexOf(k) < 0).forEach(k => {
+    head.push(k);
+    sh.getRange(1, head.length).setValue(k);
+  });
 }
 
 function borrarFila_(col, id) {
@@ -231,6 +247,29 @@ function instalar() {
   ScriptApp.newTrigger('actualizarTasas').timeBased().everyDays(1).atHour(9).inTimezone(ZONA).create();
   const r = actualizarTasas();
   Logger.log('Listo. Tasas se actualizarán cada día a las 9 am (Caracas). Prueba de hoy: ' + JSON.stringify(r));
+}
+
+// Ejecutar una vez tras actualizar: agrega el pago por pauta del video maker y la columna de pausa.
+function migrar() {
+  const sh = hoja_('Config');
+  const data = sh.getDataRange().getValues();
+  if (!data.some(r => String(r[0]) === 'videoPorPauta')) {
+    sh.appendRow(['videoPorPauta', 15.3846, 'Pago al video maker por pauta (USDT). 0 = sueldo fijo']);
+  }
+  asegurarColumnas_(hoja_('Clientes'), ['pausa']);
+  Logger.log('Migración lista');
+}
+
+// Corre la migración una sola vez, la primera vez que la página se conecta tras actualizar.
+const VERSION_DATOS = '2';
+function migrarSiHaceFalta_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('versionDatos') === VERSION_DATOS) return;
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(28000)) return;
+  try {
+    if (props.getProperty('versionDatos') !== VERSION_DATOS) { migrar(); props.setProperty('versionDatos', VERSION_DATOS); }
+  } finally { lock.releaseLock(); }
 }
 
 function onOpen() {

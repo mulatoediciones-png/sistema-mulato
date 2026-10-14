@@ -279,7 +279,7 @@ function toast(msg){ const h = $('#toastHost'); h.innerHTML = '<div class="toast
 /* ---------- configuración por defecto de la app ---------- */
 const DEFAULT_CONFIG = {
   margen: 60, colchon: 5, redondeo: 5, diaCobro: 5, inicio: 202611,
-  sueldoVideo: 200, viaticoPauta: 15,
+  sueldoVideo: 200, videoPorPauta: 15.3846, viaticoPauta: 15,
   herramientas: [{ id:'claude', nombre:'Claude', monto:30 }, { id:'capcut', nombre:'CapCut', monto:20 }],
   reparto: { direccion:35, estrategia:35, reserva:15, reinversion:15 },
   planes: [
@@ -350,7 +350,8 @@ const Store = {
   /* las escrituras van en fila, una detrás de otra, y la pantalla se actualiza al instante */
   write(payload){
     this.busy++;
-    this.q = this.q.then(() => this.call(payload)).catch(async () => {
+    const intento = () => this.call(payload);
+    this.q = this.q.then(() => intento().catch(e => (e.code === 'clave' || e.code === 'bloqueado') ? Promise.reject(e) : new Promise(r => setTimeout(r, 1500)).then(intento))).catch(async () => {
       toast('No se pudo guardar en el Sheet. Revisa tu conexión; recargué los datos.');
       await this.refresh();
     }).finally(() => { this.busy--; if (!this.busy) this.refresh(); });
@@ -382,7 +383,9 @@ const plan = id => C().planes.find(p => p.id === id);
 const activos = () => state.clientes.filter(c => c.estado !== 'pausado' && plan(c.plan));
 const pautasActivas = () => activos().reduce((s, c) => s + num(plan(c.plan).pautas), 0);
 const totalHerr = () => C().herramientas.reduce((s, h) => s + num(h.monto), 0);
-const costoPautaVideo = () => num(C().sueldoVideo) / Math.max(1, pautasActivas());
+/* video maker: si hay pago por pauta, cobra por cada pauta de los clientes que cuentan ese mes; si es 0, sueldo fijo */
+const videoPorPauta = () => num(C().videoPorPauta);
+const costoPautaVideo = () => videoPorPauta() > 0 ? videoPorPauta() : num(C().sueldoVideo) / Math.max(1, pautasActivas());
 const herrPorCliente = () => totalHerr() / Math.max(1, activos().length);
 function costoPlan(p){
   const cm = num(p.cm), video = num(p.pautas) * costoPautaVideo(), mov = num(p.pautas) * num(C().viaticoPauta), herr = herrPorCliente();
@@ -401,7 +404,19 @@ function precioPlan(p){
 }
 const cobroId = (m, cid) => m + '_' + cid;
 /* clientes que cuentan en un mes: ya habían empezado, y están activos o pagaron ese mes */
-const clientesMes = m => state.clientes.filter(c => plan(c.plan) && (!c.desde || c.desde <= m) && (c.estado !== 'pausado' || !!state.cobros[cobroId(m, c.id)]));
+/* Cuenta en el mes si pagó ese mes; o si ya había empezado y no estaba pausado (un pausado cuenta solo en los meses antes de su pausa) */
+const cuentaEnMes = (c, m) => {
+  if (!plan(c.plan)) return false;
+  if (state.cobros[cobroId(m, c.id)]) return true;
+  if (c.desde && c.desde > m) return false;
+  if (c.estado === 'pausado') return !!c.pausa && m < c.pausa;
+  return true;
+};
+const clientesMes = m => state.clientes.filter(c => cuentaEnMes(c, m));
+/* clientes pausados que ya habían empezado y no cuentan este mes: lo que se deja de pagar al equipo */
+const pausadosMes = m => state.clientes.filter(c => plan(c.plan) && c.estado === 'pausado' && (!c.desde || c.desde <= m) && !cuentaEnMes(c, m));
+const pautasDe = cl => cl.reduce((s, c) => s + num(plan(c.plan).pautas), 0);
+const videoDe = cl => videoPorPauta() > 0 ? pautasDe(cl) * videoPorPauta() : num(C().sueldoVideo);
 function cobroDe(m, c){
   const r = state.cobros[cobroId(m, c.id)];
   const p = plan(c.plan); const pp = p ? precioPlan(p) : null;
@@ -413,14 +428,16 @@ function resumenMes(m){
   cl.forEach(c => { const cb = cobroDe(m, c), eq = cb.montoBCV / factor(); esperadoBCV += cb.montoBCV; esperadoUSDT += eq;
     if (cb.pagado) { cobradoUSDT += num(cb.recibidoUSDT); base += num(cb.recibidoUSDT); } else { pendientes.push(c); base += eq; } });
   const cm = cl.reduce((s, c) => s + num(plan(c.plan).cm), 0);
-  const video = num(C().sueldoVideo), herr = totalHerr();
+  const video = videoDe(cl), herr = totalHerr();
   const gm = state.gastos.filter(g => g.mes === m && g.categoria !== 'Herramientas');
   const gastosMov = gm.filter(g => CATS_MOV.includes(g.categoria)).reduce((s, g) => s + num(g.montoUSDT), 0);
   const gastosOtros = gm.filter(g => !CATS_MOV.includes(g.categoria)).reduce((s, g) => s + num(g.montoUSDT), 0);
-  const presupuestoMov = pautasActivas() * num(C().viaticoPauta);
+  const presupuestoMov = pautasDe(cl) * num(C().viaticoPauta);
+  const pz = pausadosMes(m);
+  const ahorroPausa = { cl: pz, cm: pz.reduce((s, c) => s + num(plan(c.plan).cm), 0), video: videoPorPauta() > 0 ? pautasDe(pz) * videoPorPauta() : 0 };
   const costos = cm + video + herr + gastosMov + gastosOtros;
   const margenBruto = base - costos;
-  return { cl, esperadoBCV, esperadoUSDT, cobradoUSDT, pendientes, cm, video, herr, gastosMov, gastosOtros, presupuestoMov, costos, base, margenBruto, margenPct: base > 0 ? margenBruto / base : 0 };
+  return { cl, ahorroPausa, esperadoBCV, esperadoUSDT, cobradoUSDT, pendientes, cm, video, herr, gastosMov, gastosOtros, presupuestoMov, costos, base, margenBruto, margenPct: base > 0 ? margenBruto / base : 0 };
 }
 
 /* ---------- íconos (trazos estilo Lucide) ---------- */
@@ -592,7 +609,7 @@ const VIEWS = {
     </div>
     <div class="grid g-wide">
       <section class="card"><div class="card-h"><div><h2>Qué revisar</h2></div></div><div class="alerts">${alerts.map(alertBox).join('')}</div></section>
-      <section class="card"><div class="card-h"><div><h2>Traslados y pautas</h2><p>${pautasActivas()} pautas × ${usdt(cfg.viaticoPauta)}</p></div><button class="btn sm" data-go="gastos">${ICON.plus}Gasto</button></div>
+      <section class="card"><div class="card-h"><div><h2>Traslados y pautas</h2><p>${pautasDe(r.cl)} pautas × ${usdt(cfg.viaticoPauta)}</p></div><button class="btn sm" data-go="gastos">${ICON.plus}Gasto</button></div>
         <div class="row" style="justify-content:space-between"><span class="num" style="font-size:18px">${usdt(r.gastosMov)}</span><span class="muted">de ${usdt(r.presupuestoMov)}</span></div>
         <div class="meter" role="img" aria-label="Uso del presupuesto de traslados: ${nf0.format(usoMov * 100)}%"><i class="${usoMov > 1 ? 'over' : ''}" style="width:${Math.min(100, usoMov * 100)}%"></i></div>
         <p class="muted" style="margin:6px 0 0;font-size:13.5px">Ya está incluido en el precio de cada plan. Si te pasas, sale de tu ganancia.</p></section>
@@ -655,7 +672,9 @@ const VIEWS = {
     </div>
     <section class="card"><div class="tbl"><table>
       <thead><tr><th>Cliente</th><th class="r">Precio $ BCV</th><th class="r">En Bs hoy</th><th class="r">En USDT</th><th>Estado</th><th class="r">Recibido</th><th class="r">Acciones</th></tr></thead>
-      <tbody>${rows}</tbody></table></div></section>`;
+      <tbody>${rows}</tbody></table></div></section>
+    ${r.ahorroPausa.cl.length ? `<section class="card"><div class="card-h"><div><h2>Pausados este mes</h2><p>No se les cobra y no suman al pago del equipo</p></div><button class="btn sm" data-go="clientes">Ver clientes</button></div>
+      <div class="row">${r.ahorroPausa.cl.map(c => `<span class="chip neu">${esc(c.nombre)} · ${esc(plan(c.plan).nombre)}</span>`).join('')}</div></section>` : ''}`;
   },
 
   /* ===== GASTOS ===== */
@@ -713,7 +732,7 @@ const VIEWS = {
     const mb = Math.max(0, r.margenBruto), rep = cfg.reparto;
     const lines = [
       ['cm', 'Community manager', r.cm, r.cl.map(c => esc(c.nombre) + ' (' + usd(plan(c.plan).cm) + ')').join(', '), '--chart-mute'],
-      ['video', 'Video maker', r.video, `Sueldo fijo · ${pautasActivas()} pautas · ${usdt(costoPautaVideo())} c/u`, '--chart-mute'],
+      ['video', 'Video maker', r.video, videoPorPauta() > 0 ? `Por pauta · ${pautasDe(r.cl)} pautas × ${usdt(videoPorPauta())}` : `Sueldo fijo · ${pautasDe(r.cl)} pautas`, '--chart-mute'],
       ['direccion', 'Tu sueldo', mb * rep.direccion / 100, `Dirección y social media · ${rep.direccion}% del margen`, '--chart-2'],
       ['estrategia', 'Estratega', mb * rep.estrategia / 100, `${rep.estrategia}% del margen`, '--chart-1'],
       ['reserva', 'Fondo de reserva', mb * rep.reserva / 100, `${rep.reserva}% del margen · imprevistos y meses flojos`, '--chart-3'],
@@ -729,6 +748,10 @@ const VIEWS = {
       ${kpi('equipo', 'Equipo de producción', nf2.format(r.cm + r.video), 'USDT', 'Community + video maker')}
       <div class="kpi"><div class="ico">${ICON.check}</div><span class="lab">Pagos hechos</span><span class="val">${hechos}<small>de ${lines.length}</small></span><span class="sub">del mes</span><div class="meter"><i style="width:${hechos / lines.length * 100}%"></i></div></div>
     </div>
+    ${r.ahorroPausa.cl.length ? `<section class="card"><div class="card-h"><div><h2>Descuentos por clientes pausados</h2><p>Ya están restados de los pagos de este mes</p></div><span class="chip neu">${r.ahorroPausa.cl.length} pausado(s)</span></div>
+      <div class="tbl"><table><thead><tr><th>Cliente</th><th class="r">Community</th><th class="r">Video maker</th></tr></thead><tbody>
+      ${r.ahorroPausa.cl.map(c => { const p = plan(c.plan); return `<tr><td><div class="who"><div class="avatar" aria-hidden="true">${esc(initials(c.nombre))}</div><div><strong>${esc(c.nombre)}</strong><small>${esc(p.nombre)}${c.pausa ? ' · pausado desde ' + nombreMes(c.pausa) : ''}</small></div></div></td><td class="r num">− ${nf2.format(num(p.cm))}</td><td class="r num">${videoPorPauta() > 0 ? '− ' + nf2.format(num(p.pautas) * videoPorPauta()) : '<span class="muted">sueldo fijo</span>'}</td></tr>`; }).join('')}</tbody>
+      <tfoot><tr><td>Total descontado</td><td class="r num">− ${nf2.format(r.ahorroPausa.cm)}</td><td class="r num">${videoPorPauta() > 0 ? '− ' + nf2.format(r.ahorroPausa.video) : '—'}</td></tr></tfoot></table></div></section>` : ''}
     <div class="grid g-wide">
       <section class="card"><div class="tbl"><table>
         <thead><tr><th>Pago</th><th class="r">USDT</th><th class="r">Estado</th></tr></thead>
@@ -797,22 +820,29 @@ const VIEWS = {
         <div class="row"><button class="btn pri" type="submit">${c.id ? 'Guardar cambios' : ICON.plus + 'Agregar cliente'}</button>${c.id ? `<button class="btn ghost" type="button" data-canceledit>Cancelar</button>` : ''}</div>
       </form>`;
     const editing = ed ? state.clientes.find(c => c.id === ed) : null;
-    const rows = state.clientes.map(c => { const p = plan(c.plan), pp = p ? precioPlan(p) : null; return `<tr>
-      <td><div class="who"><div class="avatar" aria-hidden="true">${esc(initials(c.nombre))}</div><div><strong>${esc(c.nombre)}</strong><small class="num">${esc(c.telefono || 'Sin WhatsApp')}</small></div></div></td>
+    const fila = c => { const p = plan(c.plan), pp = p ? precioPlan(p) : null, paus = c.estado === 'pausado'; return `<tr>
+      <td><div class="who"><div class="avatar" aria-hidden="true" ${paus ? 'style="background:var(--sunk);color:var(--muted)"' : ''}>${esc(initials(c.nombre))}</div><div><strong>${esc(c.nombre)}</strong><small class="num">${esc(c.telefono || 'Sin WhatsApp')}</small></div></div></td>
       <td>${p ? `<span class="chip plan plain">${esc(p.nombre)}</span>` : '<span class="chip bad">Sin plan</span>'}</td>
       <td>${c.pago === 'bs' ? 'Bolívares' : 'USDT'}</td>
-      <td>${c.estado === 'pausado' ? '<span class="chip neu">Pausado</span>' : '<span class="chip ok">Activo</span>'}</td>
-      <td class="r num">${pp ? usd(pp.lista) : '—'}</td>
-      <td class="r num">${pp ? nf2.format(pp.recibes) : '—'}</td>
-      <td class="r"><div class="row" style="justify-content:flex-end;flex-wrap:nowrap"><button class="btn sm" data-editcli="${c.id}">Editar</button>
-        ${state.confirmDel === c.id ? `<button class="btn sm danger" data-delcli="${c.id}">Borrar ${esc(c.nombre)}</button><button class="btn sm ghost" data-canceldel>No</button>` : `<button class="btn sm ghost danger" data-askdel="${c.id}">Borrar</button>`}</div></td></tr>`; }).join('');
-    const counts = cfg.planes.map(p => [p.nombre, activos().filter(c => c.plan === p.id).length]);
+      ${paus ? `<td>${c.pausa ? nombreMes(c.pausa) : '—'}</td><td class="r num">${p ? '− ' + nf2.format(num(p.cm) + (videoPorPauta() > 0 ? num(p.pautas) * videoPorPauta() : 0)) : '—'}</td>`
+             : `<td class="r num">${pp ? usd(pp.lista) : '—'}</td><td class="r num">${pp ? nf2.format(pp.recibes) : '—'}</td>`}
+      <td class="r"><div class="row" style="justify-content:flex-end;flex-wrap:nowrap">
+        ${paus ? `<button class="btn sm pri" data-reactivar="${c.id}">Reactivar</button>` : `<button class="btn sm" data-pausar="${c.id}">Pausar</button>`}
+        <button class="btn sm ghost" data-editcli="${c.id}">Editar</button>
+        ${state.confirmDel === c.id ? `<button class="btn sm danger" data-delcli="${c.id}">Borrar ${esc(c.nombre)}</button><button class="btn sm ghost" data-canceldel>No</button>` : `<button class="btn sm ghost danger" data-askdel="${c.id}">Borrar</button>`}</div></td></tr>`; };
+    const act = state.clientes.filter(c => c.estado !== 'pausado'), pau = state.clientes.filter(c => c.estado === 'pausado');
+    const counts = cfg.planes.map(p => [p.nombre, act.filter(c => c.plan === p.id).length]);
     return `
-    ${head('Cartera', 'Clientes', `${activos().length} activos · ${counts.map(([n, k]) => `${esc(n)} ${k}`).join(' · ')}`)}
+    ${head('Cartera', 'Clientes', `${act.length} activos · ${pau.length} pausados · ${counts.map(([n, k]) => `${esc(n)} ${k}`).join(' · ')}`)}
     <section class="card"><div class="card-h"><h2>${editing ? 'Editar ' + esc(editing.nombre) : 'Nuevo cliente'}</h2></div>${form(editing || {})}</section>
-    <section class="card">${state.clientes.length ? `<div class="tbl"><table>
-      <thead><tr><th>Cliente</th><th>Plan</th><th>Paga en</th><th>Estado</th><th class="r">Precio $ BCV</th><th class="r">Recibes USDT</th><th></th></tr></thead>
-      <tbody>${rows}</tbody></table></div>` : `<div class="empty">Todavía no hay clientes. Agrega el primero con el formulario de arriba.</div>`}</section>`;
+    <section class="card"><div class="card-h"><div><h2>Activos</h2><p>Se les cobra cada mes y suman al pago del equipo</p></div><span class="chip ok">${act.length}</span></div>
+      ${act.length ? `<div class="tbl"><table>
+      <thead><tr><th>Cliente</th><th>Plan</th><th>Paga en</th><th class="r">Precio $ BCV</th><th class="r">Recibes USDT</th><th></th></tr></thead>
+      <tbody>${act.map(fila).join('')}</tbody></table></div>` : `<div class="empty">No hay clientes activos. Agrega uno con el formulario de arriba.</div>`}</section>
+    <section class="card"><div class="card-h"><div><h2>Pausados</h2><p>No se les cobra. Su parte del community${videoPorPauta() > 0 ? ' y del video maker' : ''} se resta sola del pago del equipo desde el mes en que se pausan</p></div><span class="chip neu">${pau.length}</span></div>
+      ${pau.length ? `<div class="tbl"><table>
+      <thead><tr><th>Cliente</th><th>Plan</th><th>Paga en</th><th>Pausado desde</th><th class="r">Se resta al equipo</th><th></th></tr></thead>
+      <tbody>${pau.map(fila).join('')}</tbody></table></div>` : `<p class="muted" style="margin:0">No hay clientes pausados.</p>`}</section>`;
   },
 
   /* ===== TASAS ===== */
@@ -867,7 +897,8 @@ const VIEWS = {
     </div></section>
     <div class="grid g2">
       <section class="card"><div class="card-h"><h2>Costos de producción</h2></div><div class="form">
-        ${fld('aVideo','Sueldo video maker (USDT/mes)','sueldoVideo',1)}
+        ${fld('aVidP','Video maker: pago por pauta (USDT)','videoPorPauta',0.01,'Se resta solo si se pausa un cliente. Pon 0 para usar sueldo fijo')}
+        ${fld('aVideo','Video maker: sueldo fijo (USDT/mes)','sueldoVideo',1,videoPorPauta() > 0 ? 'No se usa mientras haya pago por pauta' : 'Se usa porque el pago por pauta está en 0')}
         ${fld('aViat','Traslado por pauta (USDT)','viaticoPauta',0.5,'Taxi, gasolina y gastos de cada grabación')}
       </div>
       <h2 style="margin:20px 0 10px">Herramientas mensuales</h2>
@@ -895,6 +926,15 @@ function setupView(){
     </form></section></div>`;
 }
 
+/* cambia el estado guardando desde qué mes rige */
+function estadoCliente(prev, estado){
+  const c = { ...prev }; delete c.id;
+  const ahora = mesDe(hoy()) < inicioMes() ? inicioMes() : mesDe(hoy());
+  if (estado === 'pausado' && prev.estado !== 'pausado') c.pausa = ahora;
+  if (estado !== 'pausado' && prev.estado === 'pausado') { c.pausa = ''; if (!c.desde || c.desde < ahora) c.desde = ahora; }
+  c.estado = estado;
+  return c;
+}
 function msgCobro(c){
   const p = plan(c.plan), cb = cobroDe(state.mes, c), t = tasa();
   return `Hola, ${c.nombre}. Te escribimos de MULATO EDICIONES para recordarte la mensualidad de ${nombreMes(state.mes)} de tu Plan ${p.nombre}: $${nf2.format(cb.montoBCV)} a tasa BCV.` +
@@ -941,6 +981,11 @@ document.addEventListener('click', async e => {
   if (d.userec) {
     const cfg = cfgCopy(); cfg.planes.forEach(p => { if (d.userec === 'all' || d.userec === p.id) { const pp = precioPlan(p); if (pp.lista < pp.recomendado) p.lista = pp.recomendado; } });
     await saveConfig(cfg); toast('Precios actualizados'); return;
+  }
+  if (d.pausar || d.reactivar) {
+    const c = state.clientes.find(x => x.id === (d.pausar || d.reactivar)); if (!c) return;
+    await Store.set('clientes', c.id, estadoCliente(c, d.pausar ? 'pausado' : 'activo'));
+    toast(d.pausar ? `${c.nombre} pausado. Su parte ya se restó del pago del equipo.` : `${c.nombre} reactivado desde ${nombreMes(mesDe(hoy()) < inicioMes() ? inicioMes() : mesDe(hoy()))}.`); return;
   }
   if (d.editcli) { state.editCliente = d.editcli; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
   if (d.canceledit !== undefined) { state.editCliente = null; render(); return; }
@@ -1006,7 +1051,9 @@ document.addEventListener('submit', async e => {
   if (f.id === 'cliForm') {
     const nombre = $('#cNom').value.trim(); if (!nombre) { toast('Escribe el nombre del cliente.'); return; }
     const id = f.dataset.id || uid(); const prev = state.clientes.find(c => c.id === id) || {};
-    await Store.set('clientes', id, { ...prev, id: undefined, nombre, plan: $('#cPlan').value, pago: $('#cPago').value, estado: $('#cEst').value, telefono: $('#cTel').value.trim(), desde: $('#cDesde').value, orden: prev.orden ?? 50 });
+    const datos = estadoCliente({ ...prev, nombre, plan: $('#cPlan').value, pago: $('#cPago').value, telefono: $('#cTel').value.trim(), desde: $('#cDesde').value, orden: prev.orden ?? 50, estado: prev.estado || 'activo' }, $('#cEst').value);
+    if (!f.dataset.id) datos.pausa = $('#cEst').value === 'pausado' ? (mesDe(hoy()) < inicioMes() ? inicioMes() : mesDe(hoy())) : '';
+    await Store.set('clientes', id, datos);
     state.editCliente = null; toast(f.dataset.id ? 'Cambios guardados' : 'Cliente agregado'); render(); return;
   }
   if (f.dataset.payfor) {
