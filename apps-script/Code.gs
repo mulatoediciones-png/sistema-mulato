@@ -50,6 +50,7 @@ function responder_(p) {
     // Las lecturas no esperan turno; solo las escrituras se hacen de una en una.
     if (p.action === 'all') return json_({ ok: true, data: leerTodo_() });
     if (p.action === 'tasasHoy') return json_(actualizarTasas());
+    if (p.action === 'asesor') return json_(asesor_(p));
     const lock = LockService.getScriptLock();
     if (!lock.tryLock(28000)) return json_({ ok: false, error: 'ocupado' });
     try {
@@ -122,6 +123,47 @@ function leerTodo_() {
     gastos: filas_(HOJAS.gastos),
     nomina: filas_(HOJAS.nomina)
   };
+}
+
+/* ---------------- Asesor (Claude) ---------------- */
+// La clave de Anthropic va en Configuración del proyecto > Propiedades del script > ANTHROPIC_KEY. Nunca en el código.
+const MODELO_ASESOR = 'claude-sonnet-5-5';
+const INSTRUCCIONES_ASESOR = [
+  'Eres el asesor administrativo y contable de MULATO EDICIONES, una agencia de marketing en Venezuela con pocos clientes. Hablas con su dueño, que lleva todo solo, factura con su RIF personal y declara en el SENIAT.',
+  'Responde en español claro, directo y breve, con cifras concretas. Usa solo los datos que recibes; si falta un dato, dilo y di cuál hace falta. No inventes cifras.',
+  'Montos: el sistema trabaja en USDT reales; los precios de lista están en dólares BCV. Hay clientes con factura (con IVA) y otros sin factura.',
+  'Impuestos: no afirmes porcentajes, plazos ni reglas fiscales que no vengan en los datos. Si la pregunta depende de una norma (ISLR, IVA, IGTF, retenciones, patente), explica la lógica y recomienda confirmarlo con el SENIAT o un contador. Nunca sugieras ocultar ingresos ni evadir.',
+  'Cuando recomiendes algo (subir precios, cobrar, apartar dinero), da el número y el motivo. Termina con una acción concreta si aplica.',
+  'Formato: párrafos cortos o listas con guiones; puedes usar **negrita** para cifras clave. Sin tablas ni encabezados.'
+].join('\n');
+function asesor_(p) {
+  const key = PropertiesService.getScriptProperties().getProperty('ANTHROPIC_KEY');
+  if (!key) return { ok: false, error: 'sin_clave_ia' };
+  const pregunta = String(p.pregunta || '').slice(0, 1000);
+  if (!pregunta) return { ok: false, error: 'vacio' };
+  // La conversación debe alternar usuario/asistente, empezar y terminar con el usuario.
+  const msgs = [];
+  (p.historial || []).slice(-8).forEach(m => {
+    const role = m.role === 'assistant' ? 'assistant' : 'user';
+    const content = String(m.content || '').slice(0, 3000);
+    if (!content) return;
+    if (!msgs.length && role !== 'user') return;
+    if (msgs.length && msgs[msgs.length - 1].role === role) { msgs[msgs.length - 1].content += '\n' + content; return; }
+    msgs.push({ role: role, content: content });
+  });
+  if (msgs.length && msgs[msgs.length - 1].role === 'user') msgs.pop();
+  msgs.push({ role: 'user', content: pregunta });
+  const system = INSTRUCCIONES_ASESOR + '\n\nDATOS ACTUALES DEL NEGOCIO (JSON):\n' + JSON.stringify(p.contexto || {}).slice(0, 60000);
+  const r = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
+    method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+    headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+    payload: JSON.stringify({ model: MODELO_ASESOR, max_tokens: 1200, system: system, messages: msgs })
+  });
+  const code = r.getResponseCode();
+  if (code !== 200) { Logger.log('Asesor: ' + code + ' ' + r.getContentText().slice(0, 300)); return { ok: false, error: 'ia_' + code }; }
+  const j = JSON.parse(r.getContentText());
+  const texto = (j.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n').trim();
+  return texto ? { ok: true, respuesta: texto } : { ok: false, error: 'ia_vacia' };
 }
 
 /* ---------------- Escritura ---------------- */
