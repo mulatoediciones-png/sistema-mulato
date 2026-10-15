@@ -280,6 +280,7 @@ function toast(msg){ const h = $('#toastHost'); h.innerHTML = '<div class="toast
 const DEFAULT_CONFIG = {
   margen: 60, colchon: 5, redondeo: 5, diaCobro: 5, inicio: 202611,
   sueldoVideo: 200, videoPorPauta: 15.3846, viaticoPauta: 15,
+  ivaPct: 16, ivaIncluido: 0, islrPct: 0, municipalPct: 0,
   herramientas: [{ id:'claude', nombre:'Claude', monto:30 }, { id:'capcut', nombre:'CapCut', monto:20 }],
   reparto: { direccion:35, estrategia:35, reserva:15, reinversion:15 },
   planes: [
@@ -440,6 +441,37 @@ function resumenMes(m){
   return { cl, ahorroPausa, esperadoBCV, esperadoUSDT, cobradoUSDT, pendientes, cm, video, herr, gastosMov, gastosOtros, presupuestoMov, costos, base, margenBruto, margenPct: base > 0 ? margenBruto / base : 0 };
 }
 
+/* ---------- reportes: IVA, por cobrar, rentabilidad ---------- */
+const cf = k => { const v = C()[k]; return v === undefined || v === null || v === '' ? DEFAULT_CONFIG[k] : v; };
+const seFactura = c => String(c.factura) === 'si';
+const diasAtraso = m => { const due = new Date(m + '-' + String(Math.max(1, num(C().diaCobro))).padStart(2, '0') + 'T00:00:00'); return Math.floor((new Date() - due) / 864e5); };
+function reporteMes(m){
+  const r = resumenMes(m), f = factor(), t = tasa();
+  const pct = num(cf('ivaPct')) / 100, incl = num(cf('ivaIncluido')) === 1;
+  let baseFac = 0, ivaBCV = 0, ingresoFac = 0, ingresoSin = 0;
+  const filas = r.cl.map(c => {
+    const cb = cobroDe(m, c), p = plan(c.plan), pp = precioPlan(p), fac = seFactura(c);
+    const ingreso = cb.pagado ? num(cb.recibidoUSDT) : cb.montoBCV / f;
+    const base = fac ? (incl ? cb.montoBCV / (1 + pct) : cb.montoBCV) : 0;
+    const iva = fac ? (incl ? cb.montoBCV - base : cb.montoBCV * pct) : 0;
+    const ivaUSDT = incl ? iva / f : 0;                       // solo resta de tu ingreso si el IVA va incluido en el precio
+    const neto = ingreso - ivaUSDT, costo = pp.cost.total, margen = neto - costo;
+    baseFac += base; ivaBCV += iva;
+    if (fac) ingresoFac += base / f; else ingresoSin += ingreso;
+    return { c, p, cb, fac, ingreso, iva, neto, costo, margen, pct: neto > 0 ? margen / neto : 0 };
+  });
+  const credito = state.gastos.filter(g => g.mes === m).reduce((s, g) => s + num(g.ivaGasto), 0);  // USDT
+  const debitoUSDT = ivaBCV / f, debitoBs = t ? ivaBCV * t.bcv : 0, creditoBs = t ? credito * t.usdt : 0;
+  const pagarUSDT = debitoUSDT - credito, pagarBs = debitoBs - creditoBs;
+  const ivaIncluidoUSDT = incl ? debitoUSDT : 0;
+  const utilidadReal = r.margenBruto - ivaIncluidoUSDT;
+  const baseReal = r.base - ivaIncluidoUSDT;
+  const islr = ingresoFac * num(cf('islrPct')) / 100, muni = ingresoFac * num(cf('municipalPct')) / 100;
+  const porCobrar = filas.filter(x => !x.cb.pagado);
+  return { r, filas, incl, baseFac, ivaBCV, debitoUSDT, debitoBs, credito, creditoBs, pagarUSDT, pagarBs, utilidadReal, baseReal, margenReal: baseReal > 0 ? utilidadReal / baseReal : 0,
+    ingresoFac, ingresoSin, islr, muni, porCobrar };
+}
+
 /* ---------- íconos (trazos estilo Lucide) ---------- */
 const I = (d, extra = '') => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}>${d}</svg>`;
 const ICON = {
@@ -451,6 +483,7 @@ const ICON = {
   clientes: I('<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2.5"/><path d="M5.5 17a3.5 3.5 0 0 1 7 0M15 9h3M15 13h3"/>'),
   tasas: I('<path d="m22 7-8.5 8.5-5-5L2 17"/><path d="M16 7h6v6"/>'),
   ajustes: I('<path d="M20 7h-9M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/>'),
+  reportes: I('<path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/>'),
   mas: I('<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>'),
   left: I('<path d="m15 18-6-6 6-6"/>'), right: I('<path d="m9 18 6-6-6-6"/>'),
   alert: I('<path d="m21.7 18-8-14a2 2 0 0 0-3.4 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3Z"/><path d="M12 9v4M12 17h.01"/>'),
@@ -495,7 +528,7 @@ const tipU = { callbacks: { label: c => ` ${c.dataset.label || c.label}: ${fmtU(
 let pendingCharts = [];
 
 /* ---------- render ---------- */
-const NAV1 = [['resumen','Resumen'],['cobros','Cobros'],['gastos','Gastos'],['equipo','Equipo y reparto']];
+const NAV1 = [['resumen','Resumen'],['cobros','Cobros'],['gastos','Gastos'],['reportes','Reportes'],['equipo','Equipo y reparto']];
 const NAV2 = [['planes','Planes y precios'],['clientes','Clientes'],['tasas','Tasas'],['ajustes','Ajustes']];
 const BOTTOM = [['resumen','Resumen'],['cobros','Cobros'],['gastos','Gastos'],['planes','Precios']];
 let pendingRender = false;
@@ -522,10 +555,10 @@ function render(){
   $('#ratesMobile').innerHTML = t ? `<span>BCV <b>${nf2.format(t.bcv)}</b></span><span>USDT <b>${nf2.format(t.usdt)}</b></span>` : '';
   $('#nav1').innerHTML = NAV1.map(navBtn).join('');
   $('#nav2').innerHTML = NAV2.map(navBtn).join('');
-  const inMore = ['equipo','clientes','tasas','ajustes'].includes(state.tab);
+  const inMore = ['reportes','equipo','clientes','tasas','ajustes'].includes(state.tab);
   $('#bottomnav').innerHTML = BOTTOM.map(navBtn).join('') + `<button type="button" data-more ${inMore ? 'aria-current="page"' : ''} aria-expanded="${!!state.more}">${ICON.mas}<span>Más</span></button>`;
   $('#moresheet').className = 'moresheet' + (state.more ? ' open' : '');
-  $('#moresheet').innerHTML = [['equipo','Equipo y reparto'],['clientes','Clientes'],['tasas','Tasas'],['ajustes','Ajustes']].map(([k, l]) => `<button type="button" data-tab="${k}">${ICON[k]}${l}</button>`).join('');
+  $('#moresheet').innerHTML = [['reportes','Reportes'],['equipo','Equipo y reparto'],['clientes','Clientes'],['tasas','Tasas'],['ajustes','Ajustes']].map(([k, l]) => `<button type="button" data-tab="${k}">${ICON[k]}${l}</button>`).join('');
   $('#banner').innerHTML = state.offline ? `<div class="banner">No hay conexión con el Sheet. Ves los últimos datos cargados; los cambios no se guardarán hasta que vuelva la conexión.</div>` : '';
   const app = $('#app');
   destroyCharts(); pendingCharts = [];
@@ -637,6 +670,52 @@ const VIEWS = {
     </div>`;
   },
 
+  /* ===== REPORTES ===== */
+  reportes(){
+    const m = state.mes, cfg = C(), R = reporteMes(m), r = R.r, t = tasa(), ivaPct = num(cf('ivaPct'));
+    const cur = m === mesDe(hoy()), pasado = m < mesDe(hoy()), atraso = (cur || pasado) ? diasAtraso(m) : -1;
+    const sinFactura = R.filas.filter(x => !x.fac).length, conFactura = R.filas.length - sinFactura;
+    const porCobrarUSDT = R.porCobrar.reduce((s, x) => s + x.ingreso, 0);
+    const alerts = [];
+    if (!t) alerts.push(['bad', 'No hay tasa cargada: el IVA en bolívares no se puede calcular. <button class="btn sm" data-go="tasas">Cargar tasa</button>']);
+    if (R.margenReal * 100 < num(cfg.margen) - 0.5 && r.base > 0) alerts.push(['bad', `El margen real (${pct(R.margenReal)}) está por debajo de tu meta de ${nf0.format(cfg.margen)}%.`]);
+    if (R.porCobrar.length && atraso > 0) alerts.push(['bad', `${R.porCobrar.length} cliente(s) con ${atraso} día(s) de atraso: ${R.porCobrar.map(x => esc(x.c.nombre)).join(', ')}.`]);
+    if (R.incl && conFactura) alerts.push(['warn', `El IVA está configurado como incluido en el precio: ${usdt(R.debitoUSDT)} de lo que cobras este mes no es tuyo.`]);
+    if (conFactura && !R.credito) alerts.push(['info', 'Sin crédito fiscal este mes: si tus gastos tienen factura con IVA, anótalo en Gastos para pagar menos IVA.']);
+    if (!alerts.length) alerts.push(['ok', 'Sin alertas este mes.']);
+    const rowsCli = R.filas.map(x => `<tr><td><strong>${esc(x.c.nombre)}</strong></td><td><span class="chip plan plain">${esc(x.p.nombre)}</span></td><td>${x.fac ? '<span class="chip ok">Con factura</span>' : '<span class="chip neu">Sin factura</span>'}</td>
+      <td class="r num">${nf2.format(x.neto)}</td><td class="r num">${nf2.format(x.costo)}</td><td class="r num">${nf2.format(x.margen)}</td><td class="r num"><span class="chip ${x.pct * 100 >= num(cfg.margen) ? 'ok' : (x.pct > 0 ? 'warn' : 'bad')}">${pct(x.pct)}</span></td></tr>`).join('');
+    const rowsCob = R.porCobrar.map(x => `<tr><td><strong>${esc(x.c.nombre)}</strong></td><td class="r num">${usd(x.cb.montoBCV)}</td><td class="r num">${nf2.format(x.ingreso)}</td><td class="r">${atraso > 0 ? `<span class="chip bad">${atraso} día(s)</span>` : '<span class="chip warn">En plazo</span>'}</td></tr>`).join('');
+    return `
+    ${head('Contabilidad', 'Reportes de ' + nombreMes(m), 'Resultado real, lo que te deben, el IVA del mes y cuánto apartar para impuestos. Todo sale de tus cobros y gastos.', mesPicker())}
+    <div class="kpis">
+      <div class="kpi hero"><div class="ico">${ICON.margin}</div><span class="lab">Utilidad real</span><span class="val">${nf2.format(R.utilidadReal)}<small>USDT</small></span><span class="sub">Margen real ${pct(R.margenReal)} · meta ${nf0.format(cfg.margen)}%</span></div>
+      ${kpi('check', 'Cobrado', nf2.format(r.cobradoUSDT), 'USDT', `${R.filas.length - R.porCobrar.length} de ${R.filas.length} clientes`)}
+      ${kpi('in', 'Por cobrar', nf2.format(porCobrarUSDT), 'USDT', R.porCobrar.length ? R.porCobrar.length + ' cliente(s)' : 'Todo cobrado')}
+      ${kpi('cost', 'Costos', nf2.format(r.costos), 'USDT', 'Equipo, herramientas y gastos')}
+    </div>
+    <section class="card"><div class="card-h"><h2>Qué revisar</h2></div><div class="alerts">${alerts.map(alertBox).join('')}</div></section>
+    <div class="grid g2">
+      <section class="card"><div class="card-h"><div><h2>IVA del mes</h2><p>${conFactura} cliente(s) con factura · ${sinFactura} sin factura · alícuota ${nf0.format(ivaPct)}% ${R.incl ? '(incluido en el precio)' : '(sumado al precio)'}</p></div></div><div class="split">
+        <div class="line"><span>Base facturada</span><span class="num">${usd(R.baseFac)} BCV</span></div>
+        <div class="line"><span>IVA cobrado (débito fiscal)</span><span class="num">${usdt(R.debitoUSDT)}${t ? ` · Bs ${nf2.format(R.debitoBs)}` : ''}</span></div>
+        <div class="line"><span>IVA de tus compras (crédito fiscal)</span><span class="num">− ${usdt(R.credito)}${t ? ` · Bs ${nf2.format(R.creditoBs)}` : ''}</span></div>
+        <div class="line total"><span>${R.pagarUSDT >= 0 ? 'IVA a pagar al SENIAT' : 'Crédito fiscal a favor'}</span><span class="num">${usdt(Math.abs(R.pagarUSDT))}${t ? ` · Bs ${nf2.format(Math.abs(R.pagarBs))}` : ''}</span></div></div>
+        <p class="muted" style="margin:10px 0 0;font-size:13.5px">Montos en Bs a la tasa de hoy. Para declarar usa la tasa BCV del día de cada factura y confirma con tus libros de compras y ventas.</p></section>
+      <section class="card"><div class="card-h"><div><h2>Apartar para impuestos</h2><p>Sobre lo facturado, antes de IVA</p></div></div><div class="split">
+        <div class="line"><span>Ingreso con factura (sin IVA)</span><span class="num">${usdt(R.ingresoFac)}</span></div>
+        <div class="line"><span>ISLR · ${nf0.format(num(cf('islrPct')))}%</span><span class="num">${usdt(R.islr)}</span></div>
+        <div class="line"><span>Patente municipal · ${nf0.format(num(cf('municipalPct')))}%</span><span class="num">${usdt(R.muni)}</span></div>
+        <div class="line total"><span>Apartar este mes (sin contar IVA)</span><span class="num">${usdt(R.islr + R.muni)}</span></div></div>
+        ${num(cf('islrPct')) + num(cf('municipalPct')) === 0 ? '<p class="muted" style="margin:10px 0 0;font-size:13.5px">Los porcentajes están en 0. Defínelos en Ajustes con lo que te corresponda.</p>' : ''}
+        ${R.ingresoSin > 0 ? `<p class="muted" style="margin:10px 0 0;font-size:13.5px">Hay ${usdt(R.ingresoSin)} de clientes sin factura que no entran en esta base.</p>` : ''}</section>
+    </div>
+    <section class="card"><div class="card-h"><div><h2>Cuentas por cobrar</h2><p>Día de cobro: ${cfg.diaCobro} de cada mes</p></div><button class="btn sm" data-go="cobros">Ir a cobros</button></div>
+      ${R.porCobrar.length ? `<div class="tbl"><table><thead><tr><th>Cliente</th><th class="r">Monto $ BCV</th><th class="r">USDT</th><th class="r">Estado</th></tr></thead><tbody>${rowsCob}</tbody></table></div>` : '<div class="empty">No hay cobros pendientes este mes.</div>'}</section>
+    <section class="card"><div class="card-h"><div><h2>Rentabilidad por cliente</h2><p>Ingreso neto menos el costo de su plan (USDT)</p></div></div>
+      ${R.filas.length ? `<div class="tbl"><table><thead><tr><th>Cliente</th><th>Plan</th><th>Factura</th><th class="r">Ingreso neto</th><th class="r">Costo</th><th class="r">Margen</th><th class="r">%</th></tr></thead><tbody>${rowsCli}</tbody></table></div>` : '<div class="empty">No hay clientes en este mes.</div>'}</section>`;
+  },
+
   /* ===== COBROS ===== */
   cobros(){
     const t = tasa(), m = state.mes, cl = clientesMes(m), r = resumenMes(m);
@@ -709,6 +788,7 @@ const VIEWS = {
         <label class="f" for="gCli">Cliente<select id="gCli"><option value="">Sin cliente</option>${activos().map(c => `<option value="${c.id}">${esc(c.nombre)}</option>`).join('')}</select></label>
         <label class="f" for="gMonto">Monto<input id="gMonto" type="number" step="0.01" min="0" inputmode="decimal" required></label>
         <label class="f" for="gMon">Moneda<select id="gMon"><option value="usdt">USDT / $</option><option value="bs">Bolívares</option></select></label>
+        <label class="f" for="gIva">IVA de la factura (opcional)<input id="gIva" type="number" step="0.01" min="0" inputmode="decimal" placeholder="Solo si tiene factura"><span class="help">En la misma moneda del monto. Baja el IVA que pagas.</span></label>
         <label class="f" for="gNota">Nota<input id="gNota" type="text" placeholder="Ej. taxi a grabación"></label>
         <button class="btn pri" type="submit">${ICON.plus}Agregar gasto</button>
       </form></section>
@@ -815,6 +895,7 @@ const VIEWS = {
         <label class="f" for="cPlan">Plan<select id="cPlan">${cfg.planes.map(p => `<option value="${p.id}" ${c.plan === p.id ? 'selected' : ''}>${esc(p.nombre)}</option>`).join('')}</select></label>
         <label class="f" for="cPago">Paga en<select id="cPago"><option value="usdt" ${c.pago !== 'bs' ? 'selected' : ''}>USDT</option><option value="bs" ${c.pago === 'bs' ? 'selected' : ''}>Bolívares (BCV)</option></select></label>
         <label class="f" for="cEst">Estado<select id="cEst"><option value="activo" ${c.estado !== 'pausado' ? 'selected' : ''}>Activo</option><option value="pausado" ${c.estado === 'pausado' ? 'selected' : ''}>Pausado</option></select></label>
+        <label class="f" for="cFac">Se le factura<select id="cFac"><option value="no" ${c.factura !== 'si' ? 'selected' : ''}>No</option><option value="si" ${c.factura === 'si' ? 'selected' : ''}>Sí, con IVA</option></select></label>
         <label class="f" for="cTel">WhatsApp<input id="cTel" type="tel" placeholder="0414-1234567" value="${esc(c.telefono || '')}"></label>
         <label class="f" for="cDesde">Cliente desde<input id="cDesde" type="month" value="${esc(c.desde || '')}"></label>
         <div class="row"><button class="btn pri" type="submit">${c.id ? 'Guardar cambios' : ICON.plus + 'Agregar cliente'}</button>${c.id ? `<button class="btn ghost" type="button" data-canceledit>Cancelar</button>` : ''}</div>
@@ -823,7 +904,7 @@ const VIEWS = {
     const fila = c => { const p = plan(c.plan), pp = p ? precioPlan(p) : null, paus = c.estado === 'pausado'; return `<tr>
       <td><div class="who"><div class="avatar" aria-hidden="true" ${paus ? 'style="background:var(--sunk);color:var(--muted)"' : ''}>${esc(initials(c.nombre))}</div><div><strong>${esc(c.nombre)}</strong><small class="num">${esc(c.telefono || 'Sin WhatsApp')}</small></div></div></td>
       <td>${p ? `<span class="chip plan plain">${esc(p.nombre)}</span>` : '<span class="chip bad">Sin plan</span>'}</td>
-      <td>${c.pago === 'bs' ? 'Bolívares' : 'USDT'}</td>
+      <td>${c.pago === 'bs' ? 'Bolívares' : 'USDT'}${seFactura(c) ? ' · <span class="chip plan plain">Factura</span>' : ''}</td>
       ${paus ? `<td>${c.pausa ? nombreMes(c.pausa) : '—'}</td><td class="r num">${p ? '− ' + nf2.format(num(p.cm) + (videoPorPauta() > 0 ? num(p.pautas) * videoPorPauta() : 0)) : '—'}</td>`
              : `<td class="r num">${pp ? usd(pp.lista) : '—'}</td><td class="r num">${pp ? nf2.format(pp.recibes) : '—'}</td>`}
       <td class="r"><div class="row" style="justify-content:flex-end;flex-wrap:nowrap">
@@ -894,6 +975,12 @@ const VIEWS = {
       ${fld('aRedondeo','Redondear precios a ($)','redondeo',1)}
       ${fld('aDia','Día de cobro','diaCobro',1)}
       <label class="f" for="aInicio">Empezar a usar el sistema en<input id="aInicio" type="month" value="${inicioMes()}"><span class="help">Los meses anteriores no se muestran</span></label>
+    </div></section>
+    <section class="card"><div class="card-h"><div><h2>Impuestos</h2><p>Valores de referencia para los Reportes. Confírmalos con el SENIAT o un contador.</p></div></div><div class="form">
+      ${fld('aIva','IVA (%)','ivaPct',0.5,'Alícuota que aplicas en tus facturas')}
+      <label class="f" for="aIvaInc">El IVA en tus precios<select id="aIvaInc" data-cfg="ivaIncluido"><option value="0" ${num(cf('ivaIncluido')) !== 1 ? 'selected' : ''}>Se suma aparte</option><option value="1" ${num(cf('ivaIncluido')) === 1 ? 'selected' : ''}>Ya está incluido</option></select><span class="help">Aparte: el precio de lista es tu ingreso. Incluido: parte del precio es del SENIAT.</span></label>
+      ${fld('aIslr','Apartar para ISLR (%)','islrPct',0.5,'Sobre lo facturado, sin IVA')}
+      ${fld('aMuni','Apartar para patente municipal (%)','municipalPct',0.1,'Sobre lo facturado, sin IVA')}
     </div></section>
     <div class="grid g2">
       <section class="card"><div class="card-h"><h2>Costos de producción</h2></div><div class="form">
@@ -1045,13 +1132,13 @@ document.addEventListener('submit', async e => {
     if (monto <= 0) { toast('Escribe un monto mayor que cero.'); return; }
     if (mon === 'bs' && !t) { toast('Carga la tasa del día para convertir bolívares.'); return; }
     const montoUSDT = mon === 'bs' ? monto / t.usdt : monto;
-    await Store.set('gastos', uid(), { fecha, mes: mesDe(fecha), categoria: $('#gCat').value, clienteId: $('#gCli').value || null, montoOriginal: monto, moneda: mon, montoUSDT: Math.round(montoUSDT * 100) / 100, nota: $('#gNota').value.trim() });
+    await Store.set('gastos', uid(), { fecha, mes: mesDe(fecha), categoria: $('#gCat').value, clienteId: $('#gCli').value || null, montoOriginal: monto, moneda: mon, montoUSDT: Math.round(montoUSDT * 100) / 100, ivaGasto: Math.round((mon === 'bs' ? num($('#gIva').value) / t.usdt : num($('#gIva').value)) * 100) / 100, nota: $('#gNota').value.trim() });
     toast('Gasto agregado'); return;
   }
   if (f.id === 'cliForm') {
     const nombre = $('#cNom').value.trim(); if (!nombre) { toast('Escribe el nombre del cliente.'); return; }
     const id = f.dataset.id || uid(); const prev = state.clientes.find(c => c.id === id) || {};
-    const datos = estadoCliente({ ...prev, nombre, plan: $('#cPlan').value, pago: $('#cPago').value, telefono: $('#cTel').value.trim(), desde: $('#cDesde').value, orden: prev.orden ?? 50, estado: prev.estado || 'activo' }, $('#cEst').value);
+    const datos = estadoCliente({ ...prev, nombre, plan: $('#cPlan').value, pago: $('#cPago').value, factura: $('#cFac').value, telefono: $('#cTel').value.trim(), desde: $('#cDesde').value, orden: prev.orden ?? 50, estado: prev.estado || 'activo' }, $('#cEst').value);
     if (!f.dataset.id) datos.pausa = $('#cEst').value === 'pausado' ? (mesDe(hoy()) < inicioMes() ? inicioMes() : mesDe(hoy())) : '';
     await Store.set('clientes', id, datos);
     state.editCliente = null; toast(f.dataset.id ? 'Cambios guardados' : 'Cliente agregado'); render(); return;

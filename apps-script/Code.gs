@@ -23,7 +23,7 @@ const HOJAS = {
 };
 // Columnas que siempre se guardan como texto (para que Sheets no las convierta en fechas o números)
 const TEXTO = ['id', 'fecha', 'mes', 'clienteId', 'desde', 'telefono', 'fechaPago', 'nombre', 'plan', 'pago',
-  'estado', 'categoria', 'moneda', 'nota', 'metodo', 'fuente', 'pausa'];
+  'estado', 'categoria', 'moneda', 'nota', 'metodo', 'fuente', 'pausa', 'factura'];
 
 /* ---------------- API web ---------------- */
 function doGet(e) { return responder_(e && e.parameter ? e.parameter : {}); }
