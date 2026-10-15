@@ -182,6 +182,13 @@ input.mini{width:96px;min-height:38px;padding:7px 9px;text-align:right}
 .btn.danger{color:var(--bad)}
 .btn.wa{color:#128C4A;border-color:color-mix(in srgb,#128C4A 35%,var(--line))}
 .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.chat{display:grid;gap:12px;max-height:min(58vh,560px);overflow-y:auto;padding:4px 2px 8px}
+.msg{max-width:min(100%,680px);padding:12px 14px;border-radius:12px;font-size:14.5px;line-height:1.55;overflow-wrap:anywhere}
+.msg.user{justify-self:end;background:var(--brand-strong);color:var(--on-brand)}
+.msg.bot{justify-self:start;background:var(--sunk);color:var(--ink)}
+.msg.bot p{margin:0 0 8px}.msg.bot p:last-child{margin:0}.msg.bot ul{margin:0 0 8px;padding-left:20px}
+.askrow{display:flex;gap:10px;align-items:flex-end}.askrow input{flex:1;min-width:0}
+.sugs{display:flex;flex-wrap:wrap;gap:8px}
 .alerts{display:grid;gap:10px}
 .alert{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;border-radius:10px;font-size:14px;line-height:1.45}
 .alert svg{width:18px;height:18px;flex:none;margin-top:1px}
@@ -472,6 +479,44 @@ function reporteMes(m){
     ingresoFac, ingresoSin, islr, muni, porCobrar };
 }
 
+/* ---------- asesor: contexto que se envía y respuesta en texto sencillo ---------- */
+const r2 = n => Math.round(num(n) * 100) / 100;
+function contextoAsesor(){
+  const m = mesDe(hoy()), t = tasa(), cfg = C();
+  const meses = historial(m).slice(-3).map(x => { const R = reporteMes(x); return {
+    mes: x, ingresoUSDT: r2(R.r.base), cobradoUSDT: r2(R.r.cobradoUSDT), costosUSDT: r2(R.r.costos), utilidadRealUSDT: r2(R.utilidadReal), margenReal: r2(R.margenReal * 100),
+    ivaCobradoUSDT: r2(R.debitoUSDT), ivaComprasUSDT: r2(R.credito), ivaPagarUSDT: r2(R.pagarUSDT), ingresoConFacturaUSDT: r2(R.ingresoFac), ingresoSinFacturaUSDT: r2(R.ingresoSin),
+    apartarISLR_USDT: r2(R.islr), apartarMunicipal_USDT: r2(R.muni),
+    clientes: R.filas.map(f => ({ nombre: f.c.nombre, plan: f.p.nombre, factura: f.fac, pagado: f.cb.pagado, ingresoNetoUSDT: r2(f.neto), costoUSDT: r2(f.costo), margenUSDT: r2(f.margen) })) }; });
+  return { hoy: hoy(), tasaBCV: t ? t.bcv : null, tasaUSDT: t ? t.usdt : null, fechaTasa: t ? t.fecha : null,
+    ajustes: { margenObjetivoPct: cfg.margen, diaCobro: cfg.diaCobro, ivaPct: cf('ivaPct'), ivaIncluidoEnPrecio: num(cf('ivaIncluido')) === 1, islrPct: cf('islrPct'), municipalPct: cf('municipalPct'), reparto: cfg.reparto },
+    planes: cfg.planes.map(p => ({ nombre: p.nombre, precioListaBCV: p.lista, community: p.cm, pautas: p.pautas })),
+    clientes: state.clientes.map(c => ({ nombre: c.nombre, plan: plan(c.plan)?.nombre, estado: c.estado, factura: seFactura(c), pagaEn: c.pago })),
+    gastosDelMes: state.gastos.filter(g => g.mes === m).map(g => ({ tipo: g.categoria, montoUSDT: g.montoUSDT, ivaUSDT: num(g.ivaGasto), nota: g.nota })), meses };
+}
+function mdLite(t){
+  const lines = esc(t).split('\n'); let out = '', list = false;
+  const inl = x => x.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+  lines.forEach(l => { const li = l.match(/^\s*[-*•]\s+(.*)/);
+    if (li) { if (!list) { out += '<ul>'; list = true; } out += '<li>' + inl(li[1]) + '</li>'; }
+    else { if (list) { out += '</ul>'; list = false; } if (l.trim()) out += '<p>' + inl(l.replace(/^#+\s*/, '')) + '</p>'; } });
+  return out + (list ? '</ul>' : '');
+}
+async function preguntarAsesor(q){
+  state.chat = state.chat || []; state.chat.push({ role: 'user', content: q }); state.pensando = true; render(); scrollChat();
+  try {
+    const hist = state.chat.slice(0, -1).slice(-8);
+    const j = await Store.call({ action: 'asesor', pregunta: q, historial: hist, contexto: contextoAsesor() });
+    state.chat.push({ role: 'assistant', content: j.respuesta });
+  } catch(e) {
+    const msg = e.code === 'sin_clave_ia' ? 'El asesor todavía no está activado. Falta guardar la clave de Anthropic en el Apps Script (está explicado en el README, sección "Asesor").' :
+      e.code === 'clave' || e.code === 'bloqueado' ? 'Tu sesión ya no es válida. Entra de nuevo.' : 'No pude consultar al asesor ahora. Intenta de nuevo en un momento.';
+    state.chat.push({ role: 'assistant', content: msg, error: true });
+  }
+  state.pensando = false; render(); scrollChat();
+}
+const scrollChat = () => setTimeout(() => { const c = $('#chat'); if (c) c.scrollTop = c.scrollHeight; }, 0);
+
 /* ---------- íconos (trazos estilo Lucide) ---------- */
 const I = (d, extra = '') => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}>${d}</svg>`;
 const ICON = {
@@ -484,6 +529,7 @@ const ICON = {
   tasas: I('<path d="m22 7-8.5 8.5-5-5L2 17"/><path d="M16 7h6v6"/>'),
   ajustes: I('<path d="M20 7h-9M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/>'),
   reportes: I('<path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/>'),
+  asesor: I('<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>'),
   mas: I('<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>'),
   left: I('<path d="m15 18-6-6 6-6"/>'), right: I('<path d="m9 18 6-6-6-6"/>'),
   alert: I('<path d="m21.7 18-8-14a2 2 0 0 0-3.4 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3Z"/><path d="M12 9v4M12 17h.01"/>'),
@@ -528,7 +574,7 @@ const tipU = { callbacks: { label: c => ` ${c.dataset.label || c.label}: ${fmtU(
 let pendingCharts = [];
 
 /* ---------- render ---------- */
-const NAV1 = [['resumen','Resumen'],['cobros','Cobros'],['gastos','Gastos'],['reportes','Reportes'],['equipo','Equipo y reparto']];
+const NAV1 = [['resumen','Resumen'],['cobros','Cobros'],['gastos','Gastos'],['reportes','Reportes'],['asesor','Asesor'],['equipo','Equipo y reparto']];
 const NAV2 = [['planes','Planes y precios'],['clientes','Clientes'],['tasas','Tasas'],['ajustes','Ajustes']];
 const BOTTOM = [['resumen','Resumen'],['cobros','Cobros'],['gastos','Gastos'],['planes','Precios']];
 let pendingRender = false;
@@ -555,10 +601,10 @@ function render(){
   $('#ratesMobile').innerHTML = t ? `<span>BCV <b>${nf2.format(t.bcv)}</b></span><span>USDT <b>${nf2.format(t.usdt)}</b></span>` : '';
   $('#nav1').innerHTML = NAV1.map(navBtn).join('');
   $('#nav2').innerHTML = NAV2.map(navBtn).join('');
-  const inMore = ['reportes','equipo','clientes','tasas','ajustes'].includes(state.tab);
+  const inMore = ['reportes','asesor','equipo','clientes','tasas','ajustes'].includes(state.tab);
   $('#bottomnav').innerHTML = BOTTOM.map(navBtn).join('') + `<button type="button" data-more ${inMore ? 'aria-current="page"' : ''} aria-expanded="${!!state.more}">${ICON.mas}<span>Más</span></button>`;
   $('#moresheet').className = 'moresheet' + (state.more ? ' open' : '');
-  $('#moresheet').innerHTML = [['reportes','Reportes'],['equipo','Equipo y reparto'],['clientes','Clientes'],['tasas','Tasas'],['ajustes','Ajustes']].map(([k, l]) => `<button type="button" data-tab="${k}">${ICON[k]}${l}</button>`).join('');
+  $('#moresheet').innerHTML = [['reportes','Reportes'],['asesor','Asesor'],['equipo','Equipo y reparto'],['clientes','Clientes'],['tasas','Tasas'],['ajustes','Ajustes']].map(([k, l]) => `<button type="button" data-tab="${k}">${ICON[k]}${l}</button>`).join('');
   $('#banner').innerHTML = state.offline ? `<div class="banner">No hay conexión con el Sheet. Ves los últimos datos cargados; los cambios no se guardarán hasta que vuelva la conexión.</div>` : '';
   const app = $('#app');
   destroyCharts(); pendingCharts = [];
@@ -668,6 +714,20 @@ const VIEWS = {
         <div class="line"><span>Fondo de reserva · ${rep.reserva}%</span><span class="num">${usdt(mb * rep.reserva / 100)}</span></div>
         <div class="line"><span>Reinversión · ${rep.reinversion}%</span><span class="num">${usdt(mb * rep.reinversion / 100)}</span></div></div></section>
     </div>`;
+  },
+
+  /* ===== ASESOR ===== */
+  asesor(){
+    const chat = state.chat || [];
+    const sugs = ['¿Cuánto gané realmente este mes?','¿Cuánto debo apartar para el SENIAT?','¿Qué clientes me dejan menos margen?','¿A quién le tengo que cobrar?','¿Me conviene subirle el precio a algún plan?'];
+    return `
+    ${head('Asesor', 'Asesor administrativo', 'Pregúntale sobre tus números en lenguaje normal. Responde con los datos de tu sistema y no sustituye a un contador para tus declaraciones.')}
+    <section class="card">
+      <div class="chat" id="chat" aria-live="polite">${chat.length ? chat.map(m => `<div class="msg ${m.role === 'user' ? 'user' : 'bot'}">${m.role === 'user' ? esc(m.content) : mdLite(m.content)}</div>`).join('') + (state.pensando ? '<div class="msg bot">Pensando…</div>' : '') : `<div class="empty">Escribe una pregunta o elige una de abajo.</div>`}</div>
+      <div class="sugs" style="margin:12px 0">${sugs.map(q => `<button type="button" class="btn sm" data-sug="${esc(q)}" ${state.pensando ? 'disabled' : ''}>${esc(q)}</button>`).join('')}</div>
+      <form class="askrow" id="asesorForm"><label class="f" for="aQ" style="flex:1">Tu pregunta<input id="aQ" type="text" maxlength="500" autocomplete="off" ${state.pensando ? 'disabled' : ''}></label><button class="btn pri" type="submit" ${state.pensando ? 'disabled' : ''}>Preguntar</button></form>
+      ${chat.length ? '<div style="margin-top:12px"><button type="button" class="btn sm ghost" data-limpiarchat>Borrar conversación</button></div>' : ''}
+    </section>`;
   },
 
   /* ===== REPORTES ===== */
@@ -1050,6 +1110,8 @@ document.addEventListener('click', async e => {
   if (d.more !== undefined) { state.more = !state.more; render(); return; }
   if (state.more) state.more = false;
   if (d.tab) { state.tab = d.tab; state.openPago = null; render(); window.scrollTo({ top: 0 }); return; }
+  if (d.sug) { if (!state.pensando) preguntarAsesor(d.sug); return; }
+  if (d.limpiarchat !== undefined) { state.chat = []; render(); return; }
   if (d.go) { state.tab = d.go; render(); window.scrollTo({ top: 0 }); return; }
   if (d.mes) { const nm = shiftMes(state.mes, +d.mes); if (nm < inicioMes()) return; state.mes = nm; state.openPago = null; render(); return; }
   if (d.openpay) { state.openPago = state.openPago === d.openpay ? null : d.openpay; render(); return; }
@@ -1127,6 +1189,7 @@ document.addEventListener('submit', async e => {
     if (!fecha || bcv <= 0 || us <= 0) { toast('Escribe la tasa BCV y la USDT, ambas mayores que cero.'); return; }
     await Store.set('tasas', fecha, { fecha, bcv, usdt: us, fuente: 'manual' }); toast('Tasa guardada'); return;
   }
+  if (f.id === 'asesorForm') { const q = $('#aQ').value.trim(); if (q && !state.pensando) preguntarAsesor(q); return; }
   if (f.id === 'gastoForm') {
     const t = tasa(), monto = num($('#gMonto').value), mon = $('#gMon').value, fecha = $('#gFecha').value;
     if (monto <= 0) { toast('Escribe un monto mayor que cero.'); return; }

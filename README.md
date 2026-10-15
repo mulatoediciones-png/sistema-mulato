@@ -26,3 +26,14 @@ Recibes USDT     = Precio $ BCV × tasa BCV ÷ tasa USDT
 4. Abre la página y entra con el usuario (USUARIO en el Apps Script) y tu clave. La URL ya está en `API_URL` dentro de index.html.
 
 Si cambias el código del Apps Script: Implementar > Gestionar implementaciones > editar > Nueva versión (así la URL no cambia).
+
+## Asesor
+
+Pestaña **Asesor**: preguntas en lenguaje normal sobre tus números. La página envía tu pregunta y un resumen de los datos al Apps Script, y este consulta a Claude.
+
+1. Crea una clave en console.anthropic.com (la API tiene facturación aparte de la suscripción a Claude; con 6 clientes el gasto es de centavos al mes).
+2. Apps Script > Configuración del proyecto (engranaje) > Propiedades del script > Agregar: nombre `ANTHROPIC_KEY`, valor tu clave. Nunca la pegues en el código.
+3. Pega el `Code.gs` nuevo, guarda y ejecuta cualquier función una vez para aceptar el permiso de conexión externa.
+4. Implementar > Gestionar implementaciones > editar > Nueva versión.
+
+El asesor ve nombres de clientes, montos y gastos de los últimos 3 meses; no ve sueldos individuales ni claves. No sustituye a un contador.
